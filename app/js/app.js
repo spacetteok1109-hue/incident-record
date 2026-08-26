@@ -12,7 +12,7 @@ import {
   relativeDateLabel, diffDays, periodProgress, formatRange, REPEAT_LABELS, bytesToText, debounce,
 } from './util.js';
 
-const APP_VERSION = '1.2.0';
+const APP_VERSION = '1.3.0';
 
 const state = {
   tab: 'today',
@@ -305,31 +305,7 @@ async function itemCard(item, folder) {
   if (meta.children.length) body.append(meta);
 
   /* 체크리스트 */
-  const checks = item.checklist || [];
-  if (checks.length) {
-    const doneCount = checks.filter((c) => c.done).length;
-    const prog = el('div', { class: 'progress' }, [
-      el('span', { style: { width: `${Math.round((doneCount / checks.length) * 100)}%` } }),
-    ]);
-    body.append(prog);
-    const ul = el('ul', { class: 'mini-checks' });
-    checks.slice(0, 6).forEach((c) => {
-      ul.append(el('li', { class: c.done ? 'on' : '' }, [
-        el('button', {
-          type: 'button',
-          class: 'box',
-          text: '✓',
-          'aria-label': c.text,
-          onclick: (e) => { e.stopPropagation(); store.toggleChecklistItem(item.id, c.id); },
-        }),
-        el('span', { class: 'txt', text: c.text }),
-      ]));
-    });
-    if (checks.length > 6) {
-      ul.append(el('li', {}, [el('span', { class: 'txt', text: `그 외 ${checks.length - 6}개` })]));
-    }
-    body.append(ul);
-  }
+  body.append(...checklistNodes(item, { limit: 6, withBar: true }));
 
   /* 사진 썸네일 */
   if ((item.photoIds || []).length) {
@@ -610,6 +586,9 @@ async function ddayCard(item, { compact = false } = {}) {
     );
   }
 
+  // 디데이에도 체크리스트를 보여 주고 바로 체크할 수 있게 합니다.
+  if (!compact) info.append(...checklistNodes(item, { limit: 5, withBar: false }));
+
   const parts = [
     el('div', { class: 'big', text: ddayLabel(item.dueDate) }),
     info,
@@ -635,6 +614,48 @@ async function ddayCard(item, { compact = false } = {}) {
     : el('article', { class: cls.join(' ') }, parts);
   card.addEventListener('click', () => editItem(item.id));
   return card;
+}
+
+/**
+ * 카드 안에 넣을 체크리스트 조각을 만듭니다.
+ * 할 일 카드와 디데이 카드가 같은 모양을 쓰도록 여기서 한 번만 만듭니다.
+ * withBar 는 완료율 막대를 함께 그릴지 여부입니다.
+ * (디데이 카드에는 기간 진행 막대가 이미 있어 헷갈리지 않도록 숫자로만 보여 줍니다.)
+ */
+function checklistNodes(item, { limit = 6, withBar = true } = {}) {
+  const checks = item.checklist || [];
+  if (!checks.length) return [];
+  const doneCount = checks.filter((c) => c.done).length;
+  const nodes = [];
+
+  if (withBar) {
+    nodes.push(el('div', { class: 'progress' }, [
+      el('span', { style: { width: `${Math.round((doneCount / checks.length) * 100)}%` } }),
+    ]));
+  } else {
+    nodes.push(el('div', { class: 'check-count' }, [
+      el('span', { text: `체크리스트 ${doneCount}/${checks.length}` }),
+    ]));
+  }
+
+  const ul = el('ul', { class: 'mini-checks' });
+  checks.slice(0, limit).forEach((c) => {
+    ul.append(el('li', { class: c.done ? 'on' : '' }, [
+      el('button', {
+        type: 'button',
+        class: 'box',
+        text: '✓',
+        'aria-label': c.text,
+        onclick: (e) => { e.stopPropagation(); store.toggleChecklistItem(item.id, c.id); },
+      }),
+      el('span', { class: 'txt', text: c.text }),
+    ]));
+  });
+  if (checks.length > limit) {
+    ul.append(el('li', {}, [el('span', { class: 'txt', text: `그 외 ${checks.length - limit}개` })]));
+  }
+  nodes.push(ul);
+  return nodes;
 }
 
 /** 시작일이 제대로 들어 있는 항목만 기간 정보를 돌려줍니다. */

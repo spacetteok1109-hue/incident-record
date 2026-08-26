@@ -569,6 +569,16 @@ main {
   margin-top: 5px;
 }
 .dday-card .period-line .pct { font-weight: 700; color: var(--accent-ink); }
+
+.check-count {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-dim);
+  margin-top: 10px;
+  padding-top: 9px;
+  border-top: 1px solid var(--line-soft);
+}
+.dday-card .mini-checks { margin-top: 6px; }
 .dday-card.past .period-line .pct { color: var(--text-faint); }
 
 /* 편집 화면의 계산 결과 안내 */
