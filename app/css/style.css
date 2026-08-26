@@ -14,7 +14,12 @@
   --text-dim: #9aa2b1;
   --text-faint: #6b7383;
   --accent: #5865f2;
+  --accent-ink: #8b96ff;
   --accent-soft: rgba(88, 101, 242, 0.16);
+  --accent-glow: rgba(88, 101, 242, 0.45);
+  --notice-line: rgba(88, 101, 242, 0.3);
+  --sun: #e0708a;
+  --sat: #6f9fe0;
   --danger: #e05561;
   --warn: #e0a23a;
   --ok: #3fb27f;
@@ -38,8 +43,38 @@ html[data-theme='light'] {
   --text: #1a1d24;
   --text-dim: #5c6472;
   --text-faint: #8b93a3;
+  --accent-ink: #4a55d8;
   --accent-soft: rgba(88, 101, 242, 0.12);
+  --accent-glow: rgba(88, 101, 242, 0.32);
+  --notice-line: rgba(88, 101, 242, 0.28);
+  --sun: #d15470;
+  --sat: #4b7fc4;
   --shadow: 0 8px 24px rgba(20, 24, 40, 0.14);
+}
+
+/* 하양 + 연하늘색 */
+html[data-theme='sky'] {
+  color-scheme: light;
+  --bg: #f3faff;
+  --bg-elev: #ffffff;
+  --bg-elev-2: #e4f2fc;
+  --bg-input: #ffffff;
+  --line: #c9e4f6;
+  --line-soft: #e3f1fa;
+  --text: #0f3446;
+  --text-dim: #46738b;
+  --text-faint: #8fb4c9;
+  --accent: #2494d0;
+  --accent-ink: #0f6d9e;
+  --accent-soft: #dcf0fb;
+  --accent-glow: rgba(36, 148, 208, 0.38);
+  --notice-line: #a9d8f2;
+  --danger: #d1495b;
+  --warn: #c8871f;
+  --ok: #2f9b6d;
+  --sun: #d1596f;
+  --sat: #3f8ac2;
+  --shadow: 0 8px 24px rgba(15, 79, 110, 0.13);
 }
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -129,7 +164,7 @@ button { cursor: pointer; border: none; background: none; padding: 0; }
   font-size: 20px;
 }
 .icon-btn:active { background: var(--bg-elev-2); }
-.icon-btn.active { color: var(--accent); }
+.icon-btn.active { color: var(--accent-ink); }
 
 main {
   flex: 1;
@@ -171,7 +206,7 @@ main {
 }
 
 .tabbar button .ico { font-size: 20px; line-height: 1; }
-.tabbar button[aria-selected='true'] { color: var(--accent); }
+.tabbar button[aria-selected='true'] { color: var(--accent-ink); }
 
 /* ---------------- 추가 버튼 (FAB) ---------------- */
 
@@ -189,7 +224,7 @@ main {
   line-height: 1;
   display: grid;
   place-items: center;
-  box-shadow: 0 8px 22px rgba(88, 101, 242, 0.45);
+  box-shadow: 0 8px 22px var(--accent-glow);
   transition: transform 0.12s ease;
 }
 .fab:active { transform: scale(0.93); }
@@ -291,7 +326,7 @@ main {
   font-weight: 600;
   white-space: nowrap;
 }
-.chip.accent { background: var(--accent-soft); color: var(--accent); }
+.chip.accent { background: var(--accent-soft); color: var(--accent-ink); }
 .chip.danger { background: rgba(224, 85, 97, 0.16); color: var(--danger); }
 .chip.warn { background: rgba(224, 162, 58, 0.16); color: var(--warn); }
 .chip.ok { background: rgba(63, 178, 127, 0.16); color: var(--ok); }
@@ -399,8 +434,8 @@ main {
   color: var(--text-faint);
   padding-bottom: 6px;
 }
-.weekdays .sun { color: #e0708a; }
-.weekdays .sat { color: #6f9fe0; }
+.weekdays .sun { color: var(--sun); }
+.weekdays .sat { color: var(--sat); }
 
 .cal-grid {
   display: grid;
@@ -431,8 +466,8 @@ main {
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
-.cal-cell.sun .num { color: #e0708a; }
-.cal-cell.sat .num { color: #6f9fe0; }
+.cal-cell.sun .num { color: var(--sun); }
+.cal-cell.sat .num { color: var(--sat); }
 .cal-cell.out .num { opacity: 0.4; }
 .cal-cell.today .num { background: var(--accent); color: #fff; }
 .cal-cell.selected { outline: 2px solid var(--accent); outline-offset: -2px; z-index: 1; }
@@ -512,7 +547,7 @@ main {
   font-variant-numeric: tabular-nums;
   min-width: 92px;
   text-align: center;
-  color: var(--accent);
+  color: var(--accent-ink);
 }
 .dday-card.past .big { color: var(--text-faint); }
 .dday-card.today .big { color: var(--warn); }
@@ -799,7 +834,7 @@ select {
 
 .notice {
   background: var(--accent-soft);
-  border: 1px solid rgba(88, 101, 242, 0.3);
+  border: 1px solid var(--notice-line);
   border-radius: var(--radius);
   padding: 12px 14px;
   font-size: 13px;
@@ -811,7 +846,7 @@ select {
 }
 .notice .ico { font-size: 17px; flex: none; }
 .notice.warn { background: rgba(224, 162, 58, 0.13); border-color: rgba(224, 162, 58, 0.35); }
-.notice button { color: var(--accent); font-weight: 700; text-decoration: underline; }
+.notice button { color: var(--accent-ink); font-weight: 700; text-decoration: underline; }
 
 /* ---------------- 잠금 화면 ---------------- */
 
@@ -880,7 +915,7 @@ select {
   display: flex; align-items: center; gap: 10px;
 }
 @keyframes toastin { from { opacity: 0; transform: translateY(8px); } }
-.toast button { color: var(--accent); font-weight: 700; white-space: nowrap; }
+.toast button { color: var(--accent-ink); font-weight: 700; white-space: nowrap; }
 
 /* ---------------- 사진 뷰어 ---------------- */
 

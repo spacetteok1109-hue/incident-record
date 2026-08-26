@@ -19,7 +19,7 @@ const state = {
   cal: { y: new Date().getFullYear(), m: new Date().getMonth() },
   selectedDate: todayKey(),
   folderId: null,
-  settings: { theme: 'auto', hideCompleted: false },
+  settings: { theme: 'auto', hideCompleted: false, showBadge: true },
 };
 
 const main = () => $('#view');
@@ -147,6 +147,32 @@ async function render() {
   $('#topbar').replaceChildren(...header);
   view.replaceChildren(...content);
   $('#fab').classList.toggle('hidden', state.tab === 'settings');
+  updateBadge();
+}
+
+/* ---------------- 앱 아이콘 배지 ----------------
+ * 홈 화면 아이콘 위에 오늘 남은 개수를 숫자로 띄웁니다.
+ * (안드로이드 크롬, iOS 16.4 이상에서 홈 화면에 추가한 경우)
+ */
+
+export function badgeSupported() {
+  return 'setAppBadge' in navigator;
+}
+
+async function updateBadge() {
+  if (!badgeSupported()) return;
+  try {
+    if (state.settings.showBadge === false) {
+      await navigator.clearAppBadge();
+      return;
+    }
+    const { overdue, today } = await store.todayBuckets();
+    const count = overdue.length + today.filter((i) => !i.done).length;
+    if (count > 0) await navigator.setAppBadge(count);
+    else await navigator.clearAppBadge();
+  } catch {
+    // 브라우저가 막아 둔 경우 — 조용히 넘어갑니다.
+  }
 }
 
 function title(text, sub) {
@@ -746,15 +772,16 @@ async function renderSettings() {
   const viewGroup = group('표시');
   viewGroup.append(settingsRow({
     label: '테마',
-    value: { auto: '기기 설정', dark: '어둡게', light: '밝게' }[state.settings.theme],
+    value: { auto: '기기 설정', dark: '어둡게', light: '밝게', sky: '하양·하늘' }[state.settings.theme],
     onclick: async () => {
       const v = await pickerSheet({
         title: '테마',
         value: state.settings.theme,
         options: [
-          { value: 'auto', label: '기기 설정 따르기' },
-          { value: 'dark', label: '어둡게' },
-          { value: 'light', label: '밝게' },
+          { value: 'sky', label: '하양 · 하늘색', emoji: '🩵', desc: '흰 바탕에 연하늘색 포인트' },
+          { value: 'light', label: '밝게', emoji: '☀️' },
+          { value: 'dark', label: '어둡게', emoji: '🌙' },
+          { value: 'auto', label: '기기 설정 따르기', emoji: '⚙️' },
         ],
       });
       if (v === null) return;
@@ -774,6 +801,18 @@ async function renderSettings() {
       render();
     },
   }));
+  if (badgeSupported()) {
+    viewGroup.append(settingsRow({
+      label: '홈 화면 아이콘에 개수 표시',
+      desc: '오늘 남은 할 일 개수를 앱 아이콘 위에 숫자로 띄웁니다.',
+      toggle: state.settings.showBadge !== false,
+      onclick: async () => {
+        state.settings.showBadge = state.settings.showBadge === false;
+        await db.setMeta('settings', state.settings);
+        render();
+      },
+    }));
+  }
   content.push(viewGroup);
 
   /* 데이터 */
@@ -872,15 +911,21 @@ window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () 
   if (state.settings.theme === 'auto') applyTheme('auto');
 });
 
+const THEME_COLORS = { dark: '#0f1115', light: '#f4f5f8', sky: '#f3faff' };
+
+/** 'auto'는 기기 설정을 읽어 실제 테마로 바꿔 줍니다. */
+function resolveTheme(theme) {
+  if (theme !== 'auto') return theme;
+  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
+
 function applyTheme(theme) {
-  const root = document.documentElement;
-  if (theme === 'auto') root.removeAttribute('data-theme');
-  else root.setAttribute('data-theme', theme);
+  const resolved = resolveTheme(theme);
+  document.documentElement.setAttribute('data-theme', resolved);
   const meta = document.querySelector('meta[name="theme-color"]');
-  if (meta) {
-    const dark = theme === 'dark' || (theme === 'auto' && window.matchMedia('(prefers-color-scheme: dark)').matches);
-    meta.setAttribute('content', dark ? '#0f1115' : '#f4f5f8');
-  }
+  if (meta) meta.setAttribute('content', THEME_COLORS[resolved] || THEME_COLORS.dark);
+  // 다음에 앱을 열 때 화면이 깜빡이지 않도록 미리 저장해 둡니다.
+  try { localStorage.setItem('theme', theme); } catch { /* 저장을 막아 둔 브라우저 */ }
 }
 
 /* ---------------- 백업 ---------------- */
