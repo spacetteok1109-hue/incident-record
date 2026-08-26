@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no" />
+  <title>내 할 일 · 캘린더</title>
+  <meta name="description" content="기기에만 저장되는 투두 리스트 · 캘린더 · 디데이 앱" />
+  <meta name="theme-color" content="#0f1115" />
+  <meta name="color-scheme" content="dark light" />
+
+  <!-- 홈 화면에 추가했을 때 앱처럼 보이도록 -->
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="할일" />
+  <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png" />
+
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <link rel="icon" href="./icons/icon-192.png" type="image/png" />
+  <link rel="stylesheet" href="./css/style.css" />
+</head>
+<body>
+  <div id="app">
+    <!-- 스크립트가 실행되기 전에 보이는 첫 화면 -->
+    <header class="topbar"><h1>내 할 일<span class="sub">불러오는 중…</span></h1></header>
+    <main id="view">
+      <div class="empty"><span class="big">📋</span><p>불러오는 중…</p></div>
+    </main>
+  </div>
+
+  <noscript>
+    <div style="padding:24px;text-align:center">
+      이 앱을 사용하려면 자바스크립트를 켜 주세요.
+    </div>
+  </noscript>
+
+  <script type="module" src="./js/app.js"></script>
+</body>
+</html>
