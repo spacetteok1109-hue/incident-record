@@ -1,6 +1,6 @@
 /* sw.js — 오프라인 사용과 백그라운드 알림 확인 */
 
-const CACHE = 'todo-cal-v3';
+const CACHE = 'todo-cal-v4';
 const ASSETS = [
   './',
   './index.html',
@@ -31,12 +31,49 @@ self.addEventListener('install', (event) => {
 });
 
 self.addEventListener('activate', (event) => {
-  event.waitUntil(
-    caches.keys()
-      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
-      .then(() => self.clients.claim()),
-  );
+  event.waitUntil((async () => {
+    const keys = await caches.keys();
+    const stale = keys.filter((k) => k !== CACHE);
+    await Promise.all(stale.map((k) => caches.delete(k)));
+    await self.clients.claim();
+    // 예전 버전이 열려 있었다면 새 파일로 바꿔 줍니다.
+    if (stale.length) await refreshOpenClients();
+  })());
 });
+
+/**
+ * 열려 있는 화면에 새 버전이 왔다고 알립니다.
+ *
+ * 새 코드가 돌고 있는 화면은 스스로 처리하고 'ack' 를 보내 줍니다.
+ * 예전 코드가 돌고 있는 화면은 이 메시지를 알아듣지 못하므로,
+ * 잠시 기다렸다가 직접 새로고침시킵니다. 이렇게 하지 않으면
+ * 앱이 예전 파일을 계속 띄운 채로 남습니다.
+ */
+async function refreshOpenClients() {
+  const clients = await self.clients.matchAll({ type: 'window' });
+  if (!clients.length) return;
+
+  const pending = clients.map((client) => {
+    let acked = false;
+    try {
+      const ch = new MessageChannel();
+      ch.port1.onmessage = (e) => { if (e.data === 'ack') acked = true; };
+      client.postMessage({ type: 'app-updated' }, [ch.port2]);
+    } catch {
+      /* 메시지를 못 보내면 아래에서 바로 새로고침합니다. */
+    }
+    return new Promise((resolve) => {
+      setTimeout(() => {
+        if (!acked && typeof client.navigate === 'function') {
+          client.navigate(client.url).catch(() => {});
+        }
+        resolve();
+      }, 3000);
+    });
+  });
+
+  await Promise.all(pending);
+}
 
 self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'skip-waiting') self.skipWaiting();

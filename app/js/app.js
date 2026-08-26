@@ -12,7 +12,7 @@ import {
   relativeDateLabel, diffDays, periodProgress, formatRange, REPEAT_LABELS, bytesToText, debounce,
 } from './util.js';
 
-const APP_VERSION = '1.0.0';
+const APP_VERSION = '1.2.0';
 
 const state = {
   tab: 'today',
@@ -909,7 +909,12 @@ async function renderSettings() {
       desc: 'iPhone: 공유 버튼 → 홈 화면에 추가 / Android: 메뉴 → 앱 설치. 설치하면 주소창 없이 앱처럼 열립니다.',
     }));
   }
-  aboutGroup.append(settingsRow({ label: '버전', value: APP_VERSION }));
+  aboutGroup.append(settingsRow({
+    label: '버전',
+    desc: '눌러서 최신 버전을 확인하고 새로 불러옵니다.',
+    value: APP_VERSION,
+    onclick: checkForUpdate,
+  }));
   content.push(aboutGroup);
 
   return [header, content];
@@ -1257,30 +1262,79 @@ async function notificationBanner() {
 
 /* ---------------- 서비스 워커 ---------------- */
 
+let swRegistration = null;
+let reloading = false;
+
 async function registerServiceWorker() {
   if (!('serviceWorker' in navigator)) return;
+
+  // 페이지를 열 때 이미 서비스 워커가 있었는지 기억해 둡니다.
+  // 처음 설치될 때는 새로고침할 필요가 없습니다.
+  const hadController = !!navigator.serviceWorker.controller;
+
+  navigator.serviceWorker.addEventListener('message', (e) => {
+    if (e.data && e.data.type === 'open-item') openItemById(e.data.itemId);
+    if (e.data && e.data.type === 'reminders-checked') { store.invalidate(); render(); }
+    if (e.data && e.data.type === 'app-updated') {
+      // 새 코드가 돌고 있다고 알려 주면 서비스 워커가 강제로 새로고침하지 않습니다.
+      if (e.ports && e.ports[0]) e.ports[0].postMessage('ack');
+      applyUpdate();
+    }
+  });
+
+  // 새 버전이 실제로 넘겨받으면 화면도 새 코드로 바꿔 줍니다.
+  // 이게 없으면 앱은 예전 파일을 계속 띄운 채로 남습니다.
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!hadController) return;
+    applyUpdate();
+  });
+
   try {
-    const reg = await navigator.serviceWorker.register('./sw.js', { scope: './' });
-    navigator.serviceWorker.addEventListener('message', (e) => {
-      if (e.data && e.data.type === 'open-item') openItemById(e.data.itemId);
-      if (e.data && e.data.type === 'reminders-checked') { store.invalidate(); render(); }
-    });
-    reg.addEventListener('updatefound', () => {
-      const sw = reg.installing;
-      if (!sw) return;
-      sw.addEventListener('statechange', () => {
-        if (sw.state === 'installed' && navigator.serviceWorker.controller) {
-          toast('새 버전이 준비되었습니다.', {
-            action: '새로고침',
-            onAction: () => { sw.postMessage({ type: 'skip-waiting' }); location.reload(); },
-            duration: 8000,
-          });
-        }
-      });
+    swRegistration = await navigator.serviceWorker.register('./sw.js', { scope: './' });
+    // 앱을 다시 열 때마다 새 버전이 있는지 확인합니다.
+    swRegistration.update().catch(() => {});
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible' && swRegistration) {
+        swRegistration.update().catch(() => {});
+      }
     });
   } catch (e) {
     console.warn('서비스 워커 등록 실패', e);
   }
+}
+
+/**
+ * 새 버전을 화면에 반영합니다.
+ * 편집 중이면 입력을 날리지 않도록 물어보고 넘어갑니다.
+ */
+function applyUpdate() {
+  if (reloading) return;
+  if (document.querySelector('.sheet-backdrop')) {
+    toast('새 버전이 준비되었습니다.', {
+      action: '새로고침',
+      onAction: () => { reloading = true; location.reload(); },
+      duration: 10000,
+    });
+    return;
+  }
+  reloading = true;
+  location.reload();
+}
+
+/** 설정에서 직접 업데이트를 확인할 때 */
+async function checkForUpdate() {
+  if (!swRegistration) {
+    location.reload();
+    return;
+  }
+  toast('업데이트를 확인하는 중…');
+  try {
+    await swRegistration.update();
+  } catch {
+    /* 오프라인이면 그냥 새로고침합니다. */
+  }
+  reloading = true;
+  setTimeout(() => location.reload(), 600);
 }
 
 /* ---------------- 시작 ---------------- */
