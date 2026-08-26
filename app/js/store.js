@@ -125,6 +125,7 @@ export function blankItem(overrides = {}) {
     done: false,
     doneAt: null,
     checklist: [],
+    startDate: null,
     dueDate: null,
     dueTime: null,
     endTime: null,
@@ -281,7 +282,8 @@ export function sortItems(items) {
 
 export async function itemsForDate(dateKey) {
   const items = await getItems();
-  return sortItems(items.filter((it) => it.dueDate === dateKey));
+  // 기간이 있는 항목은 시작일에도 보여 줍니다.
+  return sortItems(items.filter((it) => it.dueDate === dateKey || it.startDate === dateKey));
 }
 
 export async function itemsForFolder(folderId) {
@@ -466,14 +468,18 @@ export async function monthSummary(year, month) {
   const items = await getItems();
   const prefix = `${year}-${String(month + 1).padStart(2, '0')}`;
   const map = new Map();
-  for (const it of items) {
-    if (!it.dueDate) continue;
-    if (!it.dueDate.startsWith(prefix)) continue;
-    const cur = map.get(it.dueDate) || { total: 0, done: 0, hasDday: false };
+  const mark = (key, it) => {
+    if (!key || !key.startsWith(prefix)) return;
+    const cur = map.get(key) || { total: 0, done: 0, hasDday: false };
     cur.total++;
     if (it.done) cur.done++;
     if (it.type === 'dday') cur.hasDday = true;
-    map.set(it.dueDate, cur);
+    map.set(key, cur);
+  };
+  for (const it of items) {
+    mark(it.dueDate, it);
+    // 기간이 있는 항목은 시작일에도 점을 찍습니다.
+    if (it.startDate && it.startDate !== it.dueDate) mark(it.startDate, it);
   }
   return map;
 }
