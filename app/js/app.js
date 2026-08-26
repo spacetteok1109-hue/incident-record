@@ -9,7 +9,7 @@ import { el, $, toast, openSheet, confirmDialog, pickerSheet, openViewer, closeT
 import { openItemEditor, openFolderEditor } from './editor.js';
 import {
   WEEKDAYS, todayKey, monthGrid, ddayLabel, formatDate, formatTime,
-  relativeDateLabel, diffDays, REPEAT_LABELS, bytesToText, debounce,
+  relativeDateLabel, diffDays, periodProgress, formatRange, REPEAT_LABELS, bytesToText, debounce,
 } from './util.js';
 
 const APP_VERSION = '1.0.0';
@@ -285,6 +285,8 @@ async function itemCard(item, folder) {
   const meta = el('div', { class: 'item-meta' });
   if (item.type === 'dday' && item.dueDate) {
     meta.append(el('span', { class: 'chip accent', text: ddayLabel(item.dueDate) }));
+    const p = itemPeriod(item);
+    if (p) meta.append(el('span', { class: 'chip', text: `⏳ ${periodLabel(p)}` }));
   }
   if (item.dueDate) {
     const label = relativeDateLabel(item.dueDate) + (item.dueTime ? ' ' + formatTime(item.dueTime) : '');
@@ -585,16 +587,32 @@ async function ddayCard(item, { compact = false } = {}) {
   const cls = ['dday-card', diff === 0 ? 'today' : (diff < 0 ? 'past' : '')].filter(Boolean);
   const folder = await store.getFolder(item.folderId);
 
+  const period = itemPeriod(item);
+  const dateText = period
+    ? formatRange(item.startDate, item.dueDate)
+    : formatDate(item.dueDate, { withYear: true });
+
+  const info = el('div', { class: 'info' }, [
+    el('div', { class: 't', text: item.title }),
+    el('div', {
+      class: 'd',
+      text: [dateText, folder ? `${folder.emoji} ${folder.name}` : null].filter(Boolean).join(' · '),
+    }),
+  ]);
+
+  if (period) {
+    info.append(
+      el('div', { class: 'progress' }, [el('span', { style: { width: `${period.percent}%` } })]),
+      el('div', { class: 'd period-line' }, [
+        el('span', { text: periodLabel(period) }),
+        el('span', { class: 'pct', text: `${period.percent}%` }),
+      ]),
+    );
+  }
+
   const parts = [
     el('div', { class: 'big', text: ddayLabel(item.dueDate) }),
-    el('div', { class: 'info' }, [
-      el('div', { class: 't', text: item.title }),
-      el('div', {
-        class: 'd',
-        text: [formatDate(item.dueDate, { withYear: true }), folder ? `${folder.emoji} ${folder.name}` : null]
-          .filter(Boolean).join(' · '),
-      }),
-    ]),
+    info,
   ];
 
   let cover = null;
@@ -617,6 +635,19 @@ async function ddayCard(item, { compact = false } = {}) {
     : el('article', { class: cls.join(' ') }, parts);
   card.addEventListener('click', () => editItem(item.id));
   return card;
+}
+
+/** 시작일이 제대로 들어 있는 항목만 기간 정보를 돌려줍니다. */
+function itemPeriod(item) {
+  if (!item.startDate || !item.dueDate) return null;
+  if (item.startDate > item.dueDate) return null;
+  return periodProgress(item.startDate, item.dueDate);
+}
+
+function periodLabel(p) {
+  if (p.phase === 'before') return `시작까지 ${p.untilStart}일`;
+  if (p.phase === 'after') return `${p.total}일 기간 종료`;
+  return `${p.total}일 중 ${p.elapsed}일째 · ${p.remaining}일 남음`;
 }
 
 /* ---------------- 검색 ---------------- */
@@ -786,8 +817,9 @@ async function renderSettings() {
       });
       if (v === null) return;
       state.settings.theme = v;
-      await db.setMeta('settings', state.settings);
+      // 저장을 기다리지 않고 화면부터 바꿔 줍니다.
       applyTheme(v);
+      await db.setMeta('settings', state.settings);
       render();
     },
   }));

@@ -4,7 +4,10 @@ import { el, openSheet, toast, confirmDialog, openViewer } from './ui.js';
 import * as store from './store.js';
 import * as media from './media.js';
 import * as db from './db.js';
-import { REPEAT_LABELS, REMIND_OPTIONS, todayKey } from './util.js';
+import {
+  REPEAT_LABELS, REMIND_OPTIONS, todayKey,
+  daysInclusive, endDateFromDuration, periodProgress, formatRange,
+} from './util.js';
 
 const TYPES = [
   { value: 'task', label: '할 일' },
@@ -75,6 +78,9 @@ function buildForm(api, draft, folders, addedPhotoIds, original) {
           draft.dueTime = null;
           draft.repeat = 'none';
           if (!draft.dueDate) draft.dueDate = todayKey();
+        } else {
+          // 기간은 디데이에서만 쓰므로 정리합니다.
+          draft.startDate = null;
         }
         [...seg.children].forEach((b, i) => b.setAttribute('aria-pressed', String(TYPES[i].value === draft.type)));
         rerenderDynamic();
@@ -123,7 +129,7 @@ function buildForm(api, draft, folders, addedPhotoIds, original) {
     });
 
     if (isDday) {
-      dynamic.append(field('목표 날짜', dateInput));
+      dynamic.append(buildPeriodFields(draft, dateInput));
     } else {
       const timeInput = el('input', {
         type: 'time',
@@ -322,6 +328,125 @@ function buildForm(api, draft, folders, addedPhotoIds, original) {
       },
     }));
   }
+}
+
+/**
+ * 디데이의 목표일 편집기.
+ *
+ * 기본은 목표일 하나뿐이고, '기간으로 관리'를 켜면 시작일과 총 일수가 나옵니다.
+ * 두 날짜가 실제 데이터이고 총 일수 칸은 계산기입니다.
+ *  - 시작일이나 목표일을 바꾸면 총 일수가 다시 계산돼 보입니다.
+ *  - 총 일수를 입력하면 시작일을 기준으로 목표일을 채워 줍니다.
+ */
+function buildPeriodFields(draft, endInput) {
+  const wrap = el('div', { style: { display: 'flex', flexDirection: 'column', gap: '14px' } });
+
+  const endLabel = el('label', { text: draft.startDate ? '마감일' : '목표일' });
+  wrap.append(el('div', { class: 'field' }, [endLabel, endInput]));
+
+  const toggle = el('span', { class: 'switch', role: 'switch' });
+  const toggleRow = el('button', {
+    type: 'button',
+    class: 'switch-row',
+    style: { width: '100%', textAlign: 'left' },
+    onclick: () => {
+      draft.startDate = draft.startDate ? null : todayKey();
+      refresh();
+    },
+  }, [
+    el('div', {}, [
+      el('div', { class: 'label', text: '기간으로 관리' }),
+      el('div', { class: 'desc', text: '시작일부터 며칠 걸리는지, 지금 몇 일째인지 보여 줍니다.' }),
+    ]),
+    toggle,
+  ]);
+  wrap.append(toggleRow);
+
+  const details = el('div', { style: { display: 'flex', flexDirection: 'column', gap: '14px' } });
+  wrap.append(details);
+
+  const startInput = el('input', { type: 'date' });
+  const durInput = el('input', {
+    type: 'number', min: '1', max: '99999', inputmode: 'numeric', placeholder: '예: 30',
+  });
+  const hint = el('div', { class: 'hint' });
+
+  startInput.addEventListener('change', (e) => {
+    draft.startDate = e.target.value || null;
+    refresh();
+  });
+  endInput.addEventListener('change', (e) => {
+    draft.dueDate = e.target.value || null;
+    refresh();
+  });
+
+  const applyDuration = (days) => {
+    const n = Number(days);
+    if (!Number.isFinite(n) || n < 1) return;
+    if (!draft.startDate) draft.startDate = todayKey();
+    draft.dueDate = endDateFromDuration(draft.startDate, n);
+    refresh();
+  };
+  durInput.addEventListener('change', (e) => applyDuration(e.target.value));
+
+  const durField = el('div', { class: 'field' }, [
+    el('label', { text: '총 며칠 걸리나요?' }),
+    el('div', { class: 'row' }, [
+      durInput,
+      el('button', {
+        type: 'button',
+        class: 'btn',
+        text: '마감일 계산',
+        style: { flex: '0 0 auto', width: 'auto' },
+        onclick: () => applyDuration(durInput.value),
+      }),
+    ]),
+  ]);
+  const quick = el('div', { class: 'chip-row' });
+  [7, 30, 50, 100, 365].forEach((n) => {
+    quick.append(el('button', {
+      type: 'button', class: 'chip tap', text: `${n}일`,
+      onclick: () => { durInput.value = String(n); applyDuration(n); },
+    }));
+  });
+  durField.append(quick);
+
+  function refresh() {
+    const on = !!draft.startDate;
+    toggle.setAttribute('aria-checked', String(on));
+    endLabel.textContent = on ? '마감일' : '목표일';
+    endInput.value = draft.dueDate || '';
+    details.replaceChildren();
+    if (!on) return;
+
+    startInput.value = draft.startDate;
+    const total = draft.dueDate ? daysInclusive(draft.startDate, draft.dueDate) : null;
+    durInput.value = total && total > 0 ? String(total) : '';
+    hint.replaceChildren(...summaryNodes(draft));
+    details.append(
+      el('div', { class: 'field' }, [el('label', { text: '시작일' }), startInput]),
+      durField,
+      hint,
+    );
+  }
+
+  refresh();
+  return wrap;
+}
+
+/** 기간 요약 문구 */
+function summaryNodes(draft) {
+  if (!draft.dueDate) return [el('span', { text: '마감일을 정해 주세요.' })];
+  if (draft.startDate > draft.dueDate) {
+    return [el('span', { class: 'warn', text: '\u26a0\ufe0f 마감일이 시작일보다 빠릅니다.' })];
+  }
+  const p = periodProgress(draft.startDate, draft.dueDate);
+  const range = `${formatRange(draft.startDate, draft.dueDate)} \u00b7 총 ${p.total}일`;
+  let phase = '';
+  if (p.phase === 'before') phase = `시작까지 ${p.untilStart}일 남았습니다.`;
+  else if (p.phase === 'after') phase = `${p.sinceEnd}일 전에 끝난 기간입니다.`;
+  else phase = `오늘 ${p.elapsed}일째 \u00b7 ${p.remaining}일 남음 (${p.percent}%)`;
+  return [el('span', { text: range }), el('br'), el('span', { class: 'strong', text: phase })];
 }
 
 function field(label, ...controls) {

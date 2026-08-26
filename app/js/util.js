@@ -136,6 +136,56 @@ export function nextRepeatDate(dateKey, repeat) {
   return null;
 }
 
+/** 'YYYY-MM-DD' 에서 n일 뒤의 날짜 키 */
+export function addDaysKey(dateKey, n) {
+  const d = fromDateKey(dateKey);
+  if (!d) return null;
+  return toDateKey(addDays(d, n));
+}
+
+/**
+ * 두 날짜 사이의 총 일수 (양 끝을 모두 셈).
+ * 8월 1일 ~ 8월 3일 이면 3일입니다.
+ */
+export function daysInclusive(startKey, endKey) {
+  const d = diffDays(startKey, endKey);
+  return d === null ? null : d + 1;
+}
+
+/** 총 일수로 마감일을 계산합니다. 시작일 포함이라 하루를 뺍니다. */
+export function endDateFromDuration(startKey, days) {
+  const n = Number(days);
+  if (!startKey || !Number.isFinite(n) || n < 1) return null;
+  return addDaysKey(startKey, Math.round(n) - 1);
+}
+
+/**
+ * '8월 26일 (수) → 9월 4일 (금)' 형태의 기간 표기.
+ * 두 날짜의 해가 다를 때만 연도를 붙입니다.
+ */
+export function formatRange(startKey, endKey) {
+  if (!startKey || !endKey) return '';
+  const crossYear = startKey.slice(0, 4) !== endKey.slice(0, 4);
+  return `${formatDate(startKey, { withYear: crossYear })} → ${formatDate(endKey, { withYear: crossYear })}`;
+}
+
+/**
+ * 기간의 진행 상황.
+ * phase: 'before' 시작 전 / 'during' 진행 중 / 'after' 종료됨
+ */
+export function periodProgress(startKey, endKey, baseKey = todayKey()) {
+  const total = daysInclusive(startKey, endKey);
+  if (total === null || total < 1) return null;
+  const elapsed = diffDays(startKey, baseKey) + 1; // 시작일 당일이 1일째
+  if (elapsed < 1) {
+    return { total, phase: 'before', elapsed: 0, remaining: total, untilStart: 1 - elapsed, percent: 0 };
+  }
+  if (elapsed > total) {
+    return { total, phase: 'after', elapsed: total, remaining: 0, sinceEnd: elapsed - total, percent: 100 };
+  }
+  return { total, phase: 'during', elapsed, remaining: total - elapsed, percent: Math.round((elapsed / total) * 100) };
+}
+
 export const REPEAT_LABELS = {
   none: '반복 안 함',
   daily: '매일',
