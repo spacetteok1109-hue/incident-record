@@ -1244,3 +1244,146 @@ select {
   color: var(--accent-ink);
   font-weight: 700;
 }
+
+/* ==========================================================================
+   문서 (정산서 · 명세서) — 화면에서는 미리보기, 인쇄하면 A4 한 장
+   ========================================================================== */
+
+.doc-view {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+}
+
+.doc-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: calc(var(--safe-top) + 8px) 14px 8px;
+  background: var(--bg-elev);
+  border-bottom: 1px solid var(--line);
+}
+.doc-bar .sp { flex: 1; }
+.doc-bar button {
+  height: 38px;
+  padding: 0 14px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-dim);
+}
+.doc-bar button.primary { background: var(--accent); color: #fff; }
+
+.doc-scroll {
+  flex: 1;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 14px 12px calc(var(--safe-bottom) + 24px);
+}
+
+/* 문서 자체는 테마와 상관없이 늘 흰 종이입니다. 인쇄물과 똑같이 보이도록. */
+.doc {
+  background: #fff;
+  color: #16191f;
+  max-width: 780px;
+  margin: 0 auto;
+  padding: 24px 22px 28px;
+  border-radius: 10px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.22);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.doc-head { border-bottom: 2px solid #16191f; padding-bottom: 10px; margin-bottom: 14px; }
+.doc-head h1 { margin: 0; font-size: 20px; letter-spacing: -0.4px; }
+.doc-meta { margin-top: 5px; font-size: 11.5px; color: #5c6472; }
+
+.doc h2 {
+  font-size: 13.5px;
+  margin: 20px 0 7px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid #d7dbe3;
+}
+
+.doc-sum {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-top: 4px;
+}
+.doc-sum > div {
+  border: 1px solid #d7dbe3;
+  border-radius: 8px;
+  padding: 9px 10px;
+  text-align: center;
+}
+.doc-sum > div.hi { border-color: #16191f; border-width: 1.5px; }
+.doc-sum b {
+  display: block;
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.4px;
+  white-space: nowrap;
+}
+@media (max-width: 420px) {
+  .doc-sum b { font-size: 12.5px; }
+  .doc { padding: 18px 14px 22px; }
+}
+.doc-sum span { font-size: 11px; color: #5c6472; }
+
+.doc-tbl {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+.doc-tbl th, .doc-tbl td {
+  border-bottom: 1px solid #e2e5ec;
+  padding: 6px 6px;
+  text-align: left;
+  white-space: nowrap;
+}
+.doc-tbl th {
+  background: #f1f3f8;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #3d4450;
+  border-bottom: 1px solid #c9cedb;
+}
+.doc-tbl td.r, .doc-tbl th.r { text-align: right; }
+.doc-tbl td.c, .doc-tbl th.c { text-align: center; }
+.doc-tbl tfoot td {
+  font-weight: 800;
+  border-top: 1.5px solid #16191f;
+  border-bottom: none;
+  background: #f7f8fb;
+}
+.doc-note { margin-top: 14px; font-size: 11px; color: #5c6472; }
+
+/* 표가 좁은 화면을 넘치면 그 표만 가로로 밀립니다. */
+.doc-tbl-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+@media print {
+  /* 문서만 남기고 앱 화면은 전부 감춥니다. */
+  body > *:not(#print-doc) { display: none !important; }
+  #print-doc {
+    position: static !important;
+    display: block !important;
+    background: #fff !important;
+  }
+  #print-doc .doc-bar { display: none !important; }
+  #print-doc .doc-scroll { overflow: visible !important; padding: 0 !important; }
+  #print-doc .doc-tbl-wrap { overflow: visible !important; }
+  #print-doc .doc {
+    box-shadow: none;
+    border-radius: 0;
+    max-width: none;
+    padding: 0;
+    font-size: 10.5pt;
+  }
+  .doc-tbl { page-break-inside: auto; }
+  .doc-tbl tr { page-break-inside: avoid; }
+  .doc h2 { page-break-after: avoid; }
+  @page { size: A4 portrait; margin: 14mm; }
+}

@@ -4,7 +4,7 @@ import { $, el, toast, openSheet, confirmDialog, pickerSheet, onLongPress } from
 import * as store from './store.js';
 import * as db from './db.js';
 import * as lock from './lock.js';
-import * as sheets from './sheets.js';
+import * as exporter from './export.js';
 import { editWorker, editSite, editWork, assignSheet, editAdvance } from './editor.js';
 import {
   WEEKDAYS, todayKey, monthKey, monthGrid, formatDate, formatDateShort, formatMonth,
@@ -35,16 +35,12 @@ async function boot() {
   if (await lock.isEnabled()) await showLockScreen();
 
   buildShell();
-  store.subscribe(() => {
-    render();
-    sheets.scheduleAutoBackup();
-  });
+  store.subscribe(render);
   await render();
 
   db.requestPersistence();
   registerServiceWorker();
   setupAutoLock();
-  sheets.backupOnStart();
 }
 
 function buildShell() {
@@ -784,11 +780,15 @@ async function renderReport() {
 
   content.push(el('button', {
     type: 'button',
-    class: 'btn',
+    class: 'btn primary',
     style: { width: '100%', marginTop: '18px' },
-    text: '이 달 표를 CSV로 내보내기',
-    onclick: () => exportCsv(rep),
+    text: '📄 정산서 만들기 (인쇄 · PDF)',
+    onclick: () => exporter.openStatement({ month: mKey }),
   }));
+  content.push(el('div', { class: 'row', style: { marginTop: '8px' } }, [
+    el('button', { type: 'button', class: 'btn', text: '엑셀로 내보내기', onclick: () => exporter.exportWorkbook() }),
+    el('button', { type: 'button', class: 'btn', text: 'CSV로 내보내기', onclick: () => exporter.exportMonthCsv(rep) }),
+  ]));
 
   return [header, content];
 }
@@ -842,9 +842,16 @@ async function workerSettlement(row, mKey) {
       body.append(list);
 
       body.append(el('button', {
-        type: 'button', class: 'btn',
+        type: 'button', class: 'btn primary',
         style: { width: '100%', marginTop: '18px' },
-        text: '이 사람 정산 내역 복사',
+        text: '📄 이 사람 명세서 (인쇄 · PDF)',
+        onclick: () => exporter.openStatement({ month: mKey, workerId: row.workerId }),
+      }));
+
+      body.append(el('button', {
+        type: 'button', class: 'btn',
+        style: { width: '100%', marginTop: '8px' },
+        text: '정산 내역 문자로 복사',
         onclick: async () => {
           const lines = [
             `${row.name} · ${formatMonth(mKey)} 정산`,
@@ -873,31 +880,6 @@ async function copyReport(rep) {
   lines.push('', `합계 ${comma(t.total)}원 / 실지급 ${comma(t.net)}원`);
   await copyText(lines.join('\n'));
   toast('정산 요약을 복사했습니다.');
-}
-
-function exportCsv(rep) {
-  const rows = [['이름', '출역일수', '공수', '일당합계', '차량수당', '총액', '가불', '상환', '실지급', '가불잔액']];
-  rep.byWorker.forEach((r) => {
-    rows.push([r.name, r.days, r.gongsu, r.wagePay, r.carPay, r.total, r.advance, r.repay, r.net, r.balance]);
-  });
-  const t = rep.totals;
-  rows.push(['합계', t.days, t.gongsu, t.wagePay, t.carPay, t.total, t.advance, t.repay, t.net, '']);
-
-  const csv = rows.map((r) => r.map((c) => {
-    const s = String(c ?? '');
-    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-  }).join(',')).join('\r\n');
-
-  // 엑셀에서 한글이 깨지지 않도록 BOM을 붙입니다.
-  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
-  const a = el('a', {
-    href: URL.createObjectURL(blob),
-    download: `정산_${rep.month}.csv`,
-  });
-  document.body.append(a);
-  a.click();
-  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
-  toast('CSV 파일을 저장했습니다.');
 }
 
 async function copyText(text) {
@@ -945,122 +927,27 @@ async function renderSettings() {
   const header = [title('설정')];
   const content = [];
 
-  /* ---- 구글 백업 ---- */
-  const cfg = await sheets.config();
-  const gBox = group('구글 스프레드시트 백업');
-  const g = gBox.lastChild;
+  /* ---- 내보내기 ---- */
+  const months = await store.activeMonths();
+  const thisMonth = months[0] || monthKey();
+  const xBox = group('내보내기');
+  const x = xBox.lastChild;
 
-  g.append(settingsRow({
-    label: '구글 클라이언트 ID',
-    desc: cfg.clientId ? `${cfg.clientId.slice(0, 18)}…` : '아직 설정하지 않았습니다',
-    value: cfg.clientId ? '변경' : '입력',
-    onclick: async () => {
-      const v = await promptText({
-        title: '구글 클라이언트 ID',
-        message: '구글 클라우드 콘솔에서 만든 OAuth 클라이언트 ID를 붙여넣으세요. README의 "구글 백업 켜기"를 참고하세요.',
-        value: cfg.clientId,
-        placeholder: '000000-xxxx.apps.googleusercontent.com',
-      });
-      if (v === null) return;
-      await sheets.setClientId(v);
-      toast('저장했습니다.');
-      render();
-    },
+  x.append(settingsRow({
+    label: '정산서 만들기',
+    desc: `${formatMonth(thisMonth)} 정산서를 문서로 보고, 인쇄하거나 PDF로 저장합니다.`,
+    value: '문서',
+    onclick: () => exporter.openStatement({ month: thisMonth }),
   }));
-
-  g.append(settingsRow({
-    label: '구글 계정',
-    desc: cfg.email || '연결되지 않음',
-    value: cfg.email ? '해제' : '연결',
-    onclick: async () => {
-      if (cfg.email) {
-        const ok = await confirmDialog({
-          title: '연결을 해제할까요?',
-          message: '자동 백업이 꺼집니다. 이미 만들어진 스프레드시트는 그대로 남습니다.',
-          confirmLabel: '해제',
-        });
-        if (!ok) return;
-        await sheets.disconnect();
-        toast('연결을 해제했습니다.');
-        render();
-        return;
-      }
-      try {
-        const email = await sheets.connect();
-        toast(email ? `${email} 계정에 연결했습니다.` : '구글에 연결했습니다.');
-        render();
-      } catch (e) {
-        toast(e.message);
-      }
-    },
+  x.append(settingsRow({
+    label: '엑셀 파일로 내보내기',
+    desc: '팀원 · 현장 · 출역 · 가불 · 월정산 5개 시트가 담긴 .xlsx 파일을 만듭니다.',
+    value: '엑셀',
+    onclick: () => exporter.exportWorkbook(),
   }));
-
-  const autoRow = settingsRow({
-    label: '자동 백업',
-    desc: '내용이 바뀌면 잠시 뒤 스프레드시트를 최신으로 덮어씁니다.',
-    toggle: !!cfg.auto,
-    onclick: async () => {
-      if (!cfg.clientId) { toast('먼저 클라이언트 ID를 입력해 주세요.'); return; }
-      const next = !cfg.auto;
-      if (next && !cfg.email) {
-        try { await sheets.connect(); } catch (e) { toast(e.message); return; }
-      }
-      await sheets.setAuto(next);
-      toast(next ? '자동 백업을 켰습니다.' : '자동 백업을 껐습니다.');
-      render();
-    },
-  });
-  g.append(autoRow);
-
-  g.append(settingsRow({
-    label: '지금 백업하기',
-    desc: cfg.lastBackup
-      ? `마지막 백업 ${new Date(cfg.lastBackup).toLocaleString('ko-KR')}`
-      : '아직 백업한 적이 없습니다',
-    value: '실행',
-    onclick: async () => {
-      if (!cfg.clientId) { toast('먼저 클라이언트 ID를 입력해 주세요.'); return; }
-      toast('백업 중…');
-      try {
-        const r = await sheets.backup({ interactive: true });
-        toast(`백업 완료 · ${r.rows}줄을 올렸습니다.`);
-        render();
-      } catch (e) {
-        toast(e.message);
-      }
-    },
-  }));
-
-  if (cfg.spreadsheetId) {
-    g.append(settingsRow({
-      label: '스프레드시트 열기',
-      desc: cfg.fileName,
-      value: '열기',
-      onclick: async () => {
-        const url = await sheets.spreadsheetUrl();
-        if (url) window.open(url, '_blank', 'noopener');
-      },
-    }));
-    g.append(settingsRow({
-      label: '새 파일로 다시 만들기',
-      desc: '지금 연결된 스프레드시트를 잊고, 다음 백업 때 새로 만듭니다.',
-      value: '초기화',
-      onclick: async () => {
-        const ok = await confirmDialog({
-          title: '새 파일로 만들까요?',
-          message: '기존 스프레드시트는 드라이브에 그대로 남고, 앱은 더 이상 그 파일을 건드리지 않습니다.',
-          confirmLabel: '새로 만들기',
-        });
-        if (!ok) return;
-        await sheets.forgetSpreadsheet();
-        toast('다음 백업 때 새 파일을 만듭니다.');
-        render();
-      },
-    }));
-  }
-  content.push(gBox);
+  content.push(xBox);
   content.push(el('p', { class: 'hint', style: { margin: '8px 4px 0' },
-    text: '이 앱은 서버가 없어서, 앱을 열어 둔 동안에만 백업이 올라갑니다. 권한은 이 앱이 만든 파일 하나에만 적용됩니다.' }));
+    text: '만든 파일은 기기에 저장되거나 공유 시트로 넘어갑니다. 서버로 올라가는 것은 없습니다.' }));
 
   /* ---- 데이터 ---- */
   const dBox = group('데이터');
@@ -1183,31 +1070,10 @@ async function renderSettings() {
   content.push(el('p', {
     class: 'hint',
     style: { margin: '16px 4px 0', lineHeight: '1.6' },
-    text: '모든 기록은 이 기기 안에만 저장됩니다. 구글 백업을 켜야만 데이터가 밖으로 나갑니다.',
+    text: '모든 기록은 이 기기 안에만 저장됩니다. 서버로 보내는 통신이 없고, 내보내기로 만든 파일만 기기에 남습니다.',
   }));
 
   return [header, content];
-}
-
-/** 한 줄짜리 글자 입력 시트 */
-function promptText({ title: t, message, value = '', placeholder = '' }) {
-  let current = value;
-  return openSheet({
-    title: t,
-    confirmLabel: '저장',
-    buildBody: ({ body }) => {
-      if (message) {
-        body.append(el('p', { text: message, style: { margin: '2px 0 10px', fontSize: '13.5px', color: 'var(--text-dim)', lineHeight: '1.55' } }));
-      }
-      const input = el('input', {
-        type: 'text', value, placeholder, 'data-autofocus': '',
-        autocapitalize: 'off', autocomplete: 'off', spellcheck: 'false',
-        oninput: (e) => { current = e.target.value; },
-      });
-      body.append(input);
-    },
-    onConfirm: () => current.trim(),
-  });
 }
 
 function applyTheme(theme) {

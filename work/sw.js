@@ -1,6 +1,6 @@
 /* sw.js — 오프라인 사용 */
 
-const CACHE = 'hyunjang-v1';
+const CACHE = 'hyunjang-v2';
 const ASSETS = [
   './',
   './index.html',
@@ -13,7 +13,8 @@ const ASSETS = [
   './js/ui.js',
   './js/editor.js',
   './js/lock.js',
-  './js/sheets.js',
+  './js/export.js',
+  './js/xlsx.js',
   './icons/icon-192.png',
   './icons/icon-512.png',
   './icons/icon-maskable-512.png',
@@ -73,8 +74,7 @@ self.addEventListener('message', (event) => {
   if (type === 'skip-waiting' || type === 'SKIP_WAITING') self.skipWaiting();
 });
 
-/* 같은 출처의 요청만 캐시에서 먼저 찾고, 뒤에서 조용히 갱신합니다.
-   구글 API 호출은 출처가 달라 캐시를 거치지 않고 그대로 나갑니다. */
+/* 같은 출처의 요청만 캐시에서 먼저 찾고, 뒤에서 조용히 갱신합니다. */
 self.addEventListener('fetch', (event) => {
   const req = event.request;
   if (req.method !== 'GET') return;

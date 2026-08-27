@@ -1,7 +1,7 @@
 {
   "name": "현장 관리 · 팀원 일당",
   "short_name": "현장관리",
-  "description": "팀원 · 현장 · 출역 · 일당 · 가불을 기기 안에서 관리하고 구글 스프레드시트로 백업합니다.",
+  "description": "팀원 · 현장 · 출역 · 일당 · 가불을 기기 안에서 관리하고 엑셀·정산서로 내보냅니다.",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
