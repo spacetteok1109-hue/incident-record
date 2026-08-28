@@ -4,7 +4,7 @@
    사진은 이 기기 밖으로 나가지 않습니다. */
 
 import {
-  $, $$, el, toast, confirmSheet, downloadBlob, copyText, setTheme, getTheme,
+  $, $$, el, toast, confirmSheet, saveFile, copyText, setTheme, getTheme,
 } from './ui.js';
 import * as db from './db.js';
 import { detectRedRegions, ANALYSIS_MAX, overlapRatio } from './detect.js';
@@ -847,19 +847,23 @@ async function savePiece(pc, index) {
   const canvas = cropCanvas(pc.photo.bitmap, pc.box);
   const blob = await canvasToBlob(canvas);
   const n = String(index + 1).padStart(2, '0');
-  downloadBlob(blob, `${n}${pc.box.label ? `_${safeName(pc.box.label)}` : ''}.png`);
+  return saveFile(blob, `${n}${pc.box.label ? `_${safeName(pc.box.label)}` : ''}.png`);
 }
 
 async function saveAllPieces() {
   const pieces = allPieces();
   if (!pieces.length) { toast('저장할 조각이 없습니다.', 'bad'); return; }
   toast(`${pieces.length}장을 한 장씩 저장합니다…`);
+  let saved = 0;
   for (let i = 0; i < pieces.length; i += 1) {
     // eslint-disable-next-line no-await-in-loop
-    await savePiece(pieces[i], i);
+    const result = await savePiece(pieces[i], i);
+    if (result === 'declined') { toast('저장을 멈췄습니다.'); return; }
+    if (result === 'saved') saved += 1;
     // eslint-disable-next-line no-await-in-loop
     await new Promise((r) => setTimeout(r, 260));
   }
+  toast(`${saved}장을 저장했습니다.`);
 }
 
 function buildSheet() {
@@ -892,7 +896,9 @@ function buildSheet() {
   });
 }
 
-function renderExport() {
+let previewUrl = null;
+
+async function renderExport() {
   const holder = $('#sheet-preview');
   holder.textContent = '';
   const pieces = allPieces();
@@ -903,16 +909,30 @@ function renderExport() {
   }
   const sheet = buildSheet();
   if (!sheet) return;
-  sheet.className = 'sheet-canvas';
-  holder.append(sheet);
-  holder.append(el('p', { class: 'muted small', text: `이어붙인 크기 ${sheet.width} × ${sheet.height} 픽셀` }));
+  const note = el('p', {
+    class: 'muted small',
+    text: `이어붙인 크기 ${sheet.width} × ${sheet.height} 픽셀 · 그림을 길게 눌러도 저장됩니다.`,
+  });
+  // 캔버스 대신 그림으로 보여 주면 길게 눌러 저장할 수 있습니다. 픽셀은 그대로입니다.
+  const blob = await canvasToBlob(sheet);
+  if (previewUrl) URL.revokeObjectURL(previewUrl);
+  previewUrl = URL.createObjectURL(blob);
+  holder.textContent = '';
+  holder.append(el('img', {
+    class: 'sheet-canvas',
+    src: previewUrl,
+    alt: '이어붙인 실 조각 미리보기',
+    width: sheet.width,
+    height: sheet.height,
+  }), note);
 }
 
 async function saveSheet() {
   const sheet = buildSheet();
   if (!sheet) { toast('조각이 없습니다.', 'bad'); return; }
   const blob = await canvasToBlob(sheet);
-  downloadBlob(blob, `실_정렬_${new Date().toISOString().slice(0, 10)}.png`);
+  const result = await saveFile(blob, `실_정렬_${new Date().toISOString().slice(0, 10)}.png`);
+  if (result === 'failed') toast('저장하지 못했습니다. 미리보기를 길게 눌러 저장해 보세요.', 'bad');
 }
 
 function codeTable() {
@@ -1199,8 +1219,9 @@ function bindControls() {
   $('#btn-copy-text').addEventListener('click', async () => {
     toast(await copyText(tableToText()) ? '목록을 복사했습니다.' : '복사하지 못했습니다.', '');
   });
-  $('#btn-save-csv').addEventListener('click', () => {
-    downloadBlob(new Blob(['﻿', tableToCsv()], { type: 'text/csv;charset=utf-8' }), '실_색코드.csv');
+  $('#btn-save-csv').addEventListener('click', async () => {
+    const blob = new Blob(['﻿', tableToCsv()], { type: 'text/csv;charset=utf-8' });
+    if (await saveFile(blob, '실_색코드.csv') === 'failed') toast('저장하지 못했습니다.', 'bad');
   });
 
   $('#opt-remember').addEventListener('change', (e) => {
@@ -1296,7 +1317,7 @@ async function main() {
 
   ensurePalette();
 
-  if ('serviceWorker' in navigator) {
+  if ('serviceWorker' in navigator && !globalThis.__FLOSS_STANDALONE__) {
     navigator.serviceWorker.register('./sw.js').catch(() => { /* 오프라인 기능만 빠집니다 */ });
   }
 }

@@ -52,14 +52,50 @@ export function confirmSheet(title, body, okLabel = '네') {
   });
 }
 
-/** 파일 하나 내려받기 */
-export function downloadBlob(blob, filename) {
+/** 파일 하나 내려받기 (보통 브라우저) */
+function downloadBlob(blob, filename) {
   const url = URL.createObjectURL(blob);
   const a = el('a', { href: url, download: filename });
   document.body.append(a);
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 4000);
+}
+
+let downloadsCap;
+async function getDownloads() {
+  if (downloadsCap !== undefined) return downloadsCap;
+  downloadsCap = null;
+  try {
+    if (globalThis.claude && typeof globalThis.claude.use === 'function') {
+      downloadsCap = await globalThis.claude.use('downloads');
+    }
+  } catch (e) { /* 이 화면에서는 쓸 수 없습니다 */ }
+  return downloadsCap;
+}
+
+/**
+ * 파일을 사용자에게 건네줍니다.
+ * 한 장짜리 페이지로 열려 있을 때는 그 쪽 저장 창을 쓰고,
+ * 보통 브라우저에서는 그냥 내려받습니다.
+ * @returns {Promise<'saved'|'declined'|'failed'>}
+ */
+export async function saveFile(blob, filename) {
+  const cap = await getDownloads();
+  if (cap) {
+    try {
+      await cap.save({ filename, data: blob });
+      return 'saved';
+    } catch (e) {
+      return e && e.code === 'declined' ? 'declined' : 'failed';
+    }
+  }
+  try {
+    downloadBlob(blob, filename);
+    return 'saved';
+  } catch (e) {
+    return 'failed';
+  }
 }
 
 /** 클립보드에 글자 넣기 (안 되면 false) */
@@ -82,10 +118,13 @@ export async function copyText(text) {
   }
 }
 
+/**
+ * 'auto' 는 아무 표시도 남기지 않아, 기기 설정(또는 이 페이지를 띄운 쪽의 설정)을
+ * 그대로 따르게 합니다.
+ */
 export function setTheme(theme) {
-  let t = theme;
-  if (t === 'auto') t = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-  document.documentElement.setAttribute('data-theme', t);
+  if (theme === 'auto') document.documentElement.removeAttribute('data-theme');
+  else document.documentElement.setAttribute('data-theme', theme);
   try { localStorage.setItem('theme', theme); } catch (e) { /* 저장 막힘 */ }
 }
 

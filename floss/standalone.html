@@ -1,0 +1,3356 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no" />
+  <title>실 자르기 · 색코드</title>
+  <meta name="description" content="사진에서 빨간선으로 표시한 실만 잘라 순서대로 정렬하고, 책자에서 가장 가까운 실 번호를 찾아 줍니다. 색은 그대로 지킵니다." />
+  <meta name="theme-color" content="#0f1115" />
+  <meta name="color-scheme" content="dark light" />
+
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="실자르기" />
+  <script>
+    // 저장해 둔 테마를 스타일보다 먼저 적용해 첫 화면이 깜빡이지 않게 합니다.
+    // 고른 적이 없으면 아무것도 건드리지 않고 기기(또는 이 페이지를 띄운 쪽) 설정을 따릅니다.
+    try {
+      var t = localStorage.getItem('theme');
+      if (t === 'auto') document.documentElement.removeAttribute('data-theme');
+      else if (t) document.documentElement.setAttribute('data-theme', t);
+    } catch (e) { /* 저장을 막아 둔 브라우저 */ }
+  </script>
+  <style>
+/* ==========================================================================
+   실 자르기 · 색코드 — 모바일 우선 스타일
+   ========================================================================== */
+
+:root {
+  color-scheme: dark;
+  --bg: #0f1115;
+  --bg-elev: #171a21;
+  --bg-elev-2: #1f232c;
+  --bg-input: #12151b;
+  --line: #262b35;
+  --line-soft: #1d212a;
+  --text: #e8eaf0;
+  --text-dim: #9aa2b1;
+  --text-faint: #6b7383;
+  --accent: #14b981;
+  --accent-ink: #3ddc84;
+  --on-accent: #04231a;
+  --accent-soft: rgba(20, 185, 129, 0.16);
+  --danger: #e05561;
+  --danger-soft: rgba(224, 85, 97, 0.14);
+  --warn: #e0a23a;
+  --radius: 14px;
+  --radius-sm: 10px;
+  --tap: 44px;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --tabbar-h: 58px;
+  --shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+}
+
+/* 밝은 화면. 보는 사람이 직접 고른 경우와, 기기 설정이 밝은 경우 둘 다 챙깁니다. */
+:root[data-theme='light'] {
+  color-scheme: light;
+  --bg: #f4f5f8;
+  --bg-elev: #ffffff;
+  --bg-elev-2: #eef0f5;
+  --bg-input: #ffffff;
+  --line: #dfe2ea;
+  --line-soft: #eaecf2;
+  --text: #1a1d24;
+  --text-dim: #5c6472;
+  --text-faint: #8b93a3;
+  --accent: #0f9d6f;
+  --accent-ink: #0b8560;
+  --on-accent: #ffffff;
+  --accent-soft: rgba(15, 157, 111, 0.12);
+  --danger: #c53f4b;
+  --danger-soft: rgba(197, 63, 75, 0.12);
+  --shadow: 0 8px 24px rgba(20, 24, 40, 0.14);
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme='dark']) {
+  color-scheme: light;
+  --bg: #f4f5f8;
+  --bg-elev: #ffffff;
+  --bg-elev-2: #eef0f5;
+  --bg-input: #ffffff;
+  --line: #dfe2ea;
+  --line-soft: #eaecf2;
+  --text: #1a1d24;
+  --text-dim: #5c6472;
+  --text-faint: #8b93a3;
+  --accent: #0f9d6f;
+  --accent-ink: #0b8560;
+  --on-accent: #ffffff;
+  --accent-soft: rgba(15, 157, 111, 0.12);
+  --danger: #c53f4b;
+  --danger-soft: rgba(197, 63, 75, 0.12);
+  --shadow: 0 8px 24px rgba(20, 24, 40, 0.14);
+}
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Noto Sans KR',
+    'Segoe UI', Roboto, system-ui, sans-serif;
+  font-size: 15px;
+  line-height: 1.55;
+  -webkit-text-size-adjust: 100%;
+  overscroll-behavior-y: none;
+}
+
+button, input, select, textarea { font: inherit; color: inherit; }
+button { background: none; border: 0; cursor: pointer; padding: 0; }
+h1, h2, h3, p, ol, ul { margin: 0; }
+code, kbd {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.92em;
+  background: var(--bg-elev-2);
+  border-radius: 5px;
+  padding: 1px 5px;
+}
+
+/* ------------------------------------------------------------------ 뼈대 */
+
+#app { min-height: 100dvh; display: flex; flex-direction: column; }
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  padding: calc(var(--safe-top) + 10px) 14px 10px;
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: saturate(160%) blur(12px);
+  -webkit-backdrop-filter: saturate(160%) blur(12px);
+  border-bottom: 1px solid var(--line-soft);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.topbar h1 {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+  flex: 1;
+  min-width: 0;
+}
+
+.topbar .sub {
+  display: block;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-dim);
+  letter-spacing: 0;
+}
+
+.icon-btn {
+  width: var(--tap);
+  height: var(--tap);
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  font-size: 19px;
+}
+
+#view {
+  flex: 1;
+  padding: 12px 12px calc(var(--tabbar-h) + var(--safe-bottom) + 20px);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.pane { display: flex; flex-direction: column; gap: 12px; }
+.pane[hidden] { display: none; }
+
+.tabbar {
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  z-index: 30;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  background: color-mix(in srgb, var(--bg-elev) 94%, transparent);
+  backdrop-filter: saturate(160%) blur(14px);
+  -webkit-backdrop-filter: saturate(160%) blur(14px);
+  border-top: 1px solid var(--line);
+  padding-bottom: var(--safe-bottom);
+}
+
+.tabbar button {
+  height: var(--tabbar-h);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  color: var(--text-dim);
+  font-size: 11px;
+  font-weight: 600;
+}
+.tabbar button span { font-size: 18px; line-height: 1.1; }
+.tabbar button.on { color: var(--accent-ink); }
+
+/* ------------------------------------------------------------------ 조각들 */
+
+.card {
+  background: var(--bg-elev);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.card > h2 { font-size: 15px; font-weight: 700; }
+.card.note { background: var(--bg-elev-2); }
+
+details.card > summary {
+  cursor: pointer;
+  font-size: 15px;
+  font-weight: 700;
+  list-style: none;
+}
+details.card > summary::-webkit-details-marker { display: none; }
+details.card > summary::after { content: ' ▾'; color: var(--text-dim); }
+details.card[open] > summary::after { content: ' ▴'; }
+details.card > *:not(summary) { margin-top: 10px; }
+
+.row { display: flex; align-items: center; gap: 8px; }
+.row.tight { gap: 6px; }
+.row.center { justify-content: center; }
+.row.wrap { flex-wrap: wrap; }
+.grow { flex: 1; min-width: 0; }
+
+.grid2 {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 10px;
+}
+.grid2 label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-dim);
+}
+.val { color: var(--accent-ink); font-weight: 700; }
+
+input[type='text'], input:not([type]), input[type='number'], select, .label-input {
+  min-height: 40px;
+  border: 1px solid var(--line);
+  background: var(--bg-input);
+  border-radius: var(--radius-sm);
+  padding: 0 10px;
+  width: 100%;
+}
+input[type='range'] { width: 100%; accent-color: var(--accent); }
+label.grow { display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; font-weight: 600; color: var(--text-dim); }
+label.check { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+label.check input { width: 20px; height: 20px; accent-color: var(--accent); }
+
+.btn {
+  min-height: var(--tap);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elev-2);
+  border: 1px solid var(--line-soft);
+  color: var(--text);
+  font-weight: 600;
+  font-size: 14px;
+  padding: 0 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  cursor: pointer;
+}
+.btn.primary { background: var(--accent); color: var(--on-accent); border-color: transparent; }
+.btn.danger { background: var(--danger-soft); color: var(--danger); border-color: transparent; }
+
+.mini {
+  min-height: 30px;
+  padding: 0 9px;
+  border-radius: 8px;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--line-soft);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.mini.danger { color: var(--danger); background: var(--danger-soft); border-color: transparent; }
+
+.seg {
+  display: inline-flex;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+.seg button {
+  min-height: var(--tap);
+  padding: 0 14px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-dim);
+}
+.seg button.on { background: var(--accent-soft); color: var(--accent-ink); }
+
+.muted { color: var(--text-dim); }
+.small { font-size: 12.5px; line-height: 1.5; }
+.hint { margin: -4px 2px 0; }
+.big { font-size: 40px; display: block; }
+.steps { padding-left: 20px; display: flex; flex-direction: column; gap: 5px; font-size: 13.5px; }
+
+.empty {
+  text-align: center;
+  color: var(--text-dim);
+  padding: 30px 10px;
+  border: 1px dashed var(--line);
+  border-radius: var(--radius);
+}
+
+/* ------------------------------------------------------------------ 사진 */
+
+.drop { align-items: center; text-align: center; gap: 8px; border: 1px dashed var(--line); }
+.drop.over { border-color: var(--accent); background: var(--accent-soft); }
+
+.photo-row { border-bottom: 1px solid var(--line-soft); padding: 6px 0; font-size: 13.5px; }
+.photo-row:last-child { border-bottom: 0; }
+
+.photo-strip { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 2px; }
+.photo-chip {
+  position: relative;
+  border: 2px solid transparent;
+  border-radius: 10px;
+  overflow: hidden;
+  flex: 0 0 auto;
+  line-height: 0;
+  background: var(--bg-elev-2);
+}
+.photo-chip.on { border-color: var(--accent); }
+.photo-chip .badge {
+  position: absolute;
+  right: 2px; bottom: 2px;
+  background: rgba(0, 0, 0, 0.66);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  padding: 2px 4px;
+  border-radius: 5px;
+}
+
+/* ------------------------------------------------------------------ 캔버스 */
+
+.stage-wrap {
+  position: relative;
+  height: min(56dvh, 460px);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background:
+    repeating-conic-gradient(var(--bg-elev-2) 0% 25%, var(--bg-elev) 0% 50%) 0 0 / 18px 18px;
+  border: 1px solid var(--line-soft);
+}
+#stage { width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; }
+#stage.drawing { cursor: crosshair; }
+.stage-empty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--text-dim);
+  font-size: 13.5px;
+  pointer-events: none;
+}
+.stage-empty[hidden] { display: none; }
+
+.toolbar { display: flex; flex-wrap: wrap; gap: 8px; }
+.toolbar .btn { flex: 1 1 auto; }
+
+/* ------------------------------------------------------------------ 조각 목록 */
+
+.pieces { display: flex; flex-direction: column; gap: 10px; }
+
+.piece {
+  display: flex;
+  gap: 10px;
+  background: var(--bg-elev);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+  padding: 10px;
+}
+.piece.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent-soft); }
+
+.piece-thumb { position: relative; flex: 0 0 auto; line-height: 0; cursor: pointer; }
+.thumb {
+  max-width: 108px;
+  max-height: 108px;
+  border-radius: 8px;
+  background: var(--bg-elev-2);
+  display: block;
+}
+.piece-no {
+  position: absolute;
+  left: 0; top: 0;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+  padding: 3px 6px;
+  border-radius: 8px 0 8px 0;
+}
+.piece-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.piece-body .actions { flex-wrap: wrap; }
+
+.swatch-row { align-items: center; }
+.swatch {
+  display: inline-flex;
+  align-items: center;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 7px;
+  border: 1px solid var(--line);
+  font-size: 12px;
+  font-weight: 700;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid var(--line);
+  background: var(--bg-elev-2);
+  border-radius: 999px;
+  padding: 4px 9px;
+  font-size: 12px;
+}
+.chip.best { border-color: var(--accent); background: var(--accent-soft); }
+.chip small { color: var(--text-dim); font-size: 10.5px; }
+.chip-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 1px solid rgba(128, 128, 128, 0.5);
+}
+
+/* ------------------------------------------------------------------ 미리보기 */
+
+.sheet-preview { overflow-x: auto; }
+.sheet-canvas {
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background:
+    repeating-conic-gradient(#d8d8d8 0% 25%, #f4f4f4 0% 50%) 0 0 / 14px 14px;
+}
+
+/* ------------------------------------------------------------------ 알림·시트 */
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--tabbar-h) + var(--safe-bottom) + 16px);
+  transform: translate(-50%, 12px);
+  background: var(--bg-elev-2);
+  border: 1px solid var(--line);
+  color: var(--text);
+  padding: 10px 16px;
+  border-radius: 999px;
+  font-size: 13.5px;
+  font-weight: 600;
+  box-shadow: var(--shadow);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.18s, transform 0.18s;
+  z-index: 60;
+  max-width: min(92vw, 460px);
+  text-align: center;
+}
+.toast.show { opacity: 1; transform: translate(-50%, 0); }
+.toast.bad { color: var(--danger); border-color: var(--danger); }
+
+.sheet-wrap {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  background: rgba(0, 0, 0, 0.5);
+  display: grid;
+  place-items: end center;
+  padding: 16px;
+}
+.sheet {
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 16px;
+  width: min(460px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: calc(var(--tabbar-h) + var(--safe-bottom));
+}
+.sheet h2 { font-size: 16px; font-weight: 700; }
+.sheet-actions { display: flex; gap: 8px; }
+.sheet-actions .btn { flex: 1; }
+
+@media (min-width: 760px) {
+  #view { max-width: 900px; margin: 0 auto; width: 100%; }
+  .stage-wrap { height: min(60dvh, 560px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; }
+}
+
+  </style>
+</head>
+<body>
+  <div id="app">
+    <header class="topbar">
+      <h1>실 자르기<span class="sub" id="subtitle">사진을 불러오세요</span></h1>
+      <button id="btn-theme" class="icon-btn" type="button" title="테마 바꾸기" aria-label="테마 바꾸기">🌗</button>
+    </header>
+
+    <main id="view">
+      <!-- ─────────────────────────────── 사진 ─────────────────────────────── -->
+      <section class="pane" data-pane="photo">
+        <div class="card drop" id="drop">
+          <span class="big">🧵</span>
+          <p><b>실 사진을 불러오세요.</b><br />끌어다 놓거나 <kbd>Ctrl</kbd>+<kbd>V</kbd> 로 붙여넣어도 됩니다.</p>
+          <div class="row center wrap">
+            <label class="btn primary">사진 고르기
+              <input type="file" id="file-input" accept="image/*" multiple hidden />
+            </label>
+            <label class="btn">카메라로 찍기
+              <input type="file" id="camera-input" accept="image/*" capture="environment" hidden />
+            </label>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>불러온 사진</h2>
+          <div id="photo-list"></div>
+          <p class="muted small" id="photo-empty">아직 없습니다.</p>
+        </div>
+
+        <div class="card note">
+          <h2>어떻게 쓰나요</h2>
+          <ol class="steps">
+            <li>실 사진에 <b>빨간 선·동그라미</b>로 원하는 실을 표시해 두고 불러옵니다.</li>
+            <li><b>자르기</b> 화면에서 <b>빨간선 찾기</b>를 누르면 표시한 곳만 잡아 냅니다.</li>
+            <li>번호가 사진에 적혀 있으면 <b>번호로 찾기</b>에 <code>310</code> 처럼 적어도 됩니다.</li>
+            <li><b>조각</b> 화면에서 순서를 정하고, 책자를 고르면 가장 가까운 실 번호가 나옵니다.</li>
+            <li><b>내보내기</b>에서 낱장 또는 이어붙인 한 장으로 저장합니다.</li>
+          </ol>
+          <p class="muted small">
+            사진은 이 기기 밖으로 나가지 않습니다. 잘라낸 조각은 원본 픽셀을 그대로 복사해
+            무손실 PNG 로 저장하므로 <b>실 색이 바뀌지 않습니다</b>.
+          </p>
+        </div>
+      </section>
+
+      <!-- ─────────────────────────────── 자르기 ─────────────────────────────── -->
+      <section class="pane" data-pane="cut" hidden>
+        <div id="photo-strip" class="photo-strip" hidden></div>
+
+        <div class="stage-wrap">
+          <canvas id="stage"></canvas>
+          <div class="stage-empty" id="stage-empty">사진을 먼저 불러오세요</div>
+        </div>
+
+        <div class="toolbar">
+          <div class="seg" role="group" aria-label="손가락 조작">
+            <button type="button" data-tool="view" class="on">보기</button>
+            <button type="button" data-tool="draw">그리기</button>
+          </div>
+          <button id="btn-detect" class="btn primary" type="button">빨간선 찾기</button>
+          <button id="btn-fit" class="btn" type="button">전체보기</button>
+          <button id="btn-clear" class="btn danger" type="button">모두 지우기</button>
+        </div>
+        <p class="muted small hint">
+          <b>보기</b>에서는 끌어서 옮기고 두 손가락으로 확대합니다.
+          <b>그리기</b>에서는 끌어서 상자를 새로 만듭니다. 상자를 누르면 모서리를 잡아 크기를 바꿀 수 있습니다.
+        </p>
+
+        <div class="card">
+          <h2>번호·표시로 찾기</h2>
+          <div class="row">
+            <input id="q-code" class="grow" placeholder="예: 310, 3830, blanc" inputmode="text" />
+            <button id="btn-find" class="btn primary" type="button">찾기</button>
+          </div>
+          <p class="muted small" id="find-help">
+            사진에 적힌 번호를 읽어 그 실만 잘라 냅니다. 빨간선으로 이미 표시해 두었다면 그 자리를 씁니다.
+            (글자 읽기는 처음 한 번 인터넷이 필요합니다.)
+          </p>
+          <div class="grid2">
+            <label>실이 있는 쪽
+              <select id="f-dir">
+                <option value="auto">알아서</option>
+                <option value="up">번호 위</option>
+                <option value="down">번호 아래</option>
+                <option value="left">번호 왼쪽</option>
+                <option value="right">번호 오른쪽</option>
+                <option value="center">번호 자리</option>
+              </select>
+            </label>
+            <label>잘라낼 크기 <span class="val" id="v-size"></span>
+              <input type="range" id="f-size" min="2" max="14" step="0.5" />
+            </label>
+          </div>
+        </div>
+
+        <details class="card">
+          <summary>빨간선을 어떻게 읽을지 조절하기</summary>
+          <div class="grid2">
+            <label>빨강 민감도 <span class="val" id="v-strength"></span>
+              <input type="range" id="s-strength" min="0.2" max="2.4" step="0.1" />
+            </label>
+            <label>끊긴 선 잇기 <span class="val" id="v-join"></span>
+              <input type="range" id="s-join" min="0" max="0.03" step="0.001" />
+            </label>
+            <label>자르는 기준
+              <select id="s-mode">
+                <option value="auto">알아서 (테두리는 안쪽, 줄은 옆 띠)</option>
+                <option value="inside">빨간 테두리 안쪽</option>
+                <option value="band">빨간 줄 옆의 띠</option>
+                <option value="mark">표시 둘레</option>
+              </select>
+            </label>
+            <label>띠를 놓을 쪽
+              <select id="s-side">
+                <option value="auto">알아서 (색이 있는 쪽)</option>
+                <option value="both">줄 가운데(양쪽)</option>
+                <option value="before">줄 위 / 왼쪽</option>
+                <option value="after">줄 아래 / 오른쪽</option>
+              </select>
+            </label>
+            <label>여백 <span class="val" id="v-pad"></span>
+              <input type="range" id="s-pad" min="0" max="0.4" step="0.01" />
+            </label>
+            <label>띠 두께 <span class="val" id="v-band"></span>
+              <input type="range" id="s-band" min="0.02" max="0.4" step="0.01" />
+            </label>
+          </div>
+          <label class="check">
+            <input type="checkbox" id="s-solid" /> 빨간 실은 표시로 보지 않기
+          </label>
+          <p class="muted small">
+            빨간 실이 사진에 함께 있으면 표시로 잘못 잡힐 수 있습니다. 위 항목을 켜 두면
+            <b>가는 선</b>만 표시로 봅니다. 굵은 붓으로 그은 표시가 무시된다면 꺼 주세요.
+          </p>
+          <p class="muted small">
+            민감도를 낮추면 옅은 빨강까지 잡고, 높이면 진한 빨강만 잡습니다.
+            테두리 안쪽으로 자르면 빨간 선이 조각에 섞이지 않습니다.
+          </p>
+        </details>
+      </section>
+
+      <!-- ─────────────────────────────── 조각 ─────────────────────────────── -->
+      <section class="pane" data-pane="list" hidden>
+        <div class="card">
+          <div class="row">
+            <label class="grow">정렬 순서
+              <select id="sort-mode"></select>
+            </label>
+          </div>
+          <div class="row">
+            <label class="grow">책자(색상표)
+              <select id="palette-sel"></select>
+            </label>
+          </div>
+          <div class="row wrap">
+            <button id="btn-analyze" class="btn primary" type="button">색코드 뽑기</button>
+            <label class="btn">색상표 넣기
+              <input type="file" id="palette-file" accept=".csv,.json,.txt,text/csv,application/json" hidden />
+            </label>
+            <button id="btn-palette-del" class="btn danger" type="button">색상표 지우기</button>
+            <span class="grow"></span>
+            <span class="muted small" id="piece-count">아직 없음</span>
+          </div>
+          <p class="muted small">
+            색상표 파일은 <code>번호,이름,#RRGGBB</code> 로 된 CSV 나 JSON 이면 됩니다.
+            뽑은 색코드는 <b>알려만 주고 사진은 고치지 않습니다.</b>
+          </p>
+        </div>
+        <div id="piece-list" class="pieces"></div>
+      </section>
+
+      <!-- ─────────────────────────────── 내보내기 ─────────────────────────────── -->
+      <section class="pane" data-pane="out" hidden>
+        <div class="card">
+          <div class="row wrap">
+            <button id="btn-save-sheet" class="btn primary" type="button">이어붙여 한 장 저장</button>
+            <button id="btn-save-all" class="btn" type="button">조각 낱장 저장</button>
+            <span class="grow"></span>
+            <span class="muted small" id="out-count">조각 없음</span>
+          </div>
+          <div class="grid2">
+            <label>배치
+              <select id="o-layout">
+                <option value="row">가로 한 줄</option>
+                <option value="column">세로 한 줄</option>
+                <option value="grid">격자</option>
+              </select>
+            </label>
+            <label>격자 열 수
+              <input type="number" id="o-columns" min="1" max="12" step="1" />
+            </label>
+            <label>사이 간격 <span class="val" id="v-gap"></span>
+              <input type="range" id="o-gap" min="0" max="60" step="2" />
+            </label>
+            <label>바탕
+              <select id="o-bg">
+                <option value="#ffffff">흰색</option>
+                <option value="#000000">검정</option>
+                <option value="#f2f2f2">밝은 회색</option>
+                <option value="transparent">투명</option>
+              </select>
+            </label>
+            <label>글자 넣기
+              <select id="o-label">
+                <option value="both">내 번호 + 추천 코드</option>
+                <option value="name">내가 적은 번호만</option>
+                <option value="code">추천 색코드만</option>
+                <option value="order">순서 번호만</option>
+                <option value="none">넣지 않기</option>
+              </select>
+            </label>
+          </div>
+          <p class="muted small">
+            조각은 크기를 바꾸지 않고 그대로 붙입니다. 글자는 조각 <b>바깥쪽</b>에만 그려서
+            실 픽셀은 건드리지 않습니다.
+          </p>
+        </div>
+
+        <div class="card">
+          <h2>미리보기</h2>
+          <div id="sheet-preview" class="sheet-preview"></div>
+        </div>
+
+        <div class="card">
+          <h2>색코드 목록</h2>
+          <div class="row wrap">
+            <button id="btn-copy-text" class="btn" type="button">글로 복사</button>
+            <button id="btn-copy-csv" class="btn" type="button">CSV 로 복사</button>
+            <button id="btn-save-csv" class="btn" type="button">CSV 파일로 저장</button>
+          </div>
+          <p class="muted small">ΔE 는 색 차이입니다. 2 아래면 눈으로 거의 구분되지 않습니다.</p>
+        </div>
+
+        <div class="card">
+          <h2>설정</h2>
+          <label class="check"><input type="checkbox" id="opt-remember" /> 이 기기에 작업 내용 기억하기</label>
+          <div class="row"><button id="btn-reset" class="btn danger" type="button">처음 상태로 되돌리기</button></div>
+          <p class="muted small">
+            기억하기를 켜면 사진과 상자가 이 브라우저 안에만 저장되어, 창을 닫았다 열어도 이어서 할 수 있습니다.
+          </p>
+        </div>
+      </section>
+    </main>
+
+    <nav class="tabbar">
+      <button type="button" data-tab="photo" class="on"><span>🖼️</span>사진</button>
+      <button type="button" data-tab="cut"><span>✂️</span>자르기</button>
+      <button type="button" data-tab="list"><span>🧵</span>조각</button>
+      <button type="button" data-tab="out"><span>💾</span>내보내기</button>
+    </nav>
+  </div>
+
+  <noscript>
+    <div style="padding:24px;text-align:center">이 앱을 쓰려면 자바스크립트를 켜 주세요.</div>
+  </noscript>
+
+  <script type="module">
+/* 실 자르기 · 색코드 — 한 파일짜리 판.
+   floss/ 폴더의 원본에서 build-standalone.mjs 로 만들어 냅니다. 여기서 직접 고치지 마세요. */
+globalThis.__FLOSS_STANDALONE__ = true;
+globalThis.__FLOSS_DATA__ = { dmc: {"id":"dmc","name":"DMC (25번 자수실)","note":"DMC 색상표 454색. 출처 데이터: sharlagelfand/dmc (adrianj/CrossStitchCreator 원본).","colors":[{"code":"3713","name":"Salmon Very Light","family":"Salmon","ko":"연어색","hex":"#FFE2E2"},{"code":"761","name":"Salmon Light","family":"Salmon","ko":"연어색","hex":"#FFC9C9"},{"code":"760","name":"Salmon","family":"Salmon","ko":"연어색","hex":"#F5ADAD"},{"code":"3712","name":"Salmon Medium","family":"Salmon","ko":"연어색","hex":"#F18787"},{"code":"3328","name":"Salmon Dark","family":"Salmon","ko":"연어색","hex":"#E36D6D"},{"code":"347","name":"Salmon Very Dark","family":"Salmon","ko":"연어색","hex":"#BF2D2D"},{"code":"353","name":"Peach","family":"Peach","ko":"피치","hex":"#FED7CC"},{"code":"352","name":"Coral Light","family":"Coral","ko":"산호색","hex":"#FD9C97"},{"code":"351","name":"Coral","family":"Coral","ko":"산호색","hex":"#E96A67"},{"code":"350","name":"Coral Medium","family":"Coral","ko":"산호색","hex":"#E04848"},{"code":"349","name":"Coral Dark","family":"Coral","ko":"산호색","hex":"#D21035"},{"code":"817","name":"Coral Red Very Dark","family":"Coral Red","ko":"","hex":"#BB051F"},{"code":"3708","name":"Melon Light","family":"Melon","ko":"멜론색","hex":"#FFCBD5"},{"code":"3706","name":"Melon Medium","family":"Melon","ko":"멜론색","hex":"#FFADBC"},{"code":"3705","name":"Melon Dark","family":"Melon","ko":"멜론색","hex":"#FF7992"},{"code":"3801","name":"Melon Very Dark","family":"Melon","ko":"멜론색","hex":"#E74967"},{"code":"666","name":"Red Bright","family":"Red","ko":"빨강","hex":"#E31D42"},{"code":"321","name":"Red","family":"Red","ko":"빨강","hex":"#C72B3B"},{"code":"304","name":"Red Medium","family":"Red","ko":"빨강","hex":"#B71F33"},{"code":"498","name":"Red Dark","family":"Red","ko":"빨강","hex":"#A7132B"},{"code":"816","name":"Garnet","family":"Garnet","ko":"석류색","hex":"#970B23"},{"code":"815","name":"Garnet Medium","family":"Garnet","ko":"석류색","hex":"#87071F"},{"code":"814","name":"Garnet Dark","family":"Garnet","ko":"석류색","hex":"#7B001B"},{"code":"894","name":"Carnation Very Light","family":"Carnation","ko":"","hex":"#FFB2BB"},{"code":"893","name":"Carnation Light","family":"Carnation","ko":"","hex":"#FC90A2"},{"code":"892","name":"Carnation Medium","family":"Carnation","ko":"","hex":"#FF798C"},{"code":"891","name":"Carnation Dark","family":"Carnation","ko":"","hex":"#FF5773"},{"code":"818","name":"Baby Pink","family":"Baby Pink","ko":"베이비 핑크","hex":"#FFDFD9"},{"code":"957","name":"Geranium Pale","family":"Geranium","ko":"","hex":"#FDB5B5"},{"code":"956","name":"Geranium","family":"Geranium","ko":"","hex":"#FF9191"},{"code":"309","name":"Rose Dark","family":"Rose","ko":"로즈","hex":"#BA4A4A"},{"code":"963","name":"Dusty Rose Ultra Very Light","family":"Dusty Rose","ko":"더스티 로즈","hex":"#FFD7D7"},{"code":"3716","name":"Dusty Rose Medium Very Light","family":"Dusty Rose","ko":"더스티 로즈","hex":"#FFBDBD"},{"code":"962","name":"Dusty Rose Medium","family":"Dusty Rose","ko":"더스티 로즈","hex":"#E68A8A"},{"code":"961","name":"Dusty Rose Dark","family":"Dusty Rose","ko":"더스티 로즈","hex":"#CF7373"},{"code":"3833","name":"Raspberry Light","family":"Raspberry","ko":"라즈베리","hex":"#EA8699"},{"code":"3832","name":"Raspberry Medium","family":"Raspberry","ko":"라즈베리","hex":"#DB556E"},{"code":"3831","name":"Raspberry Dark","family":"Raspberry","ko":"라즈베리","hex":"#B32F48"},{"code":"777","name":"Raspberry Very Dark","family":"Raspberry","ko":"라즈베리","hex":"#913546"},{"code":"819","name":"Baby Pink Light","family":"Baby Pink","ko":"베이비 핑크","hex":"#FFEEEB"},{"code":"3326","name":"Rose Light","family":"Rose","ko":"로즈","hex":"#FBADB4"},{"code":"776","name":"Pink Medium","family":"Pink","ko":"분홍","hex":"#FCB0B9"},{"code":"899","name":"Rose Medium","family":"Rose","ko":"로즈","hex":"#F27688"},{"code":"335","name":"Rose","family":"Rose","ko":"로즈","hex":"#EE546E"},{"code":"326","name":"Rose Very Dark","family":"Rose","ko":"로즈","hex":"#B33B4B"},{"code":"151","name":"Dusty Rose Very Light","family":"Dusty Rose","ko":"더스티 로즈","hex":"#F0CED4"},{"code":"3354","name":"Dusty Rose Light","family":"Dusty Rose","ko":"더스티 로즈","hex":"#E4A6AC"},{"code":"3733","name":"Dusty Rose","family":"Dusty Rose","ko":"더스티 로즈","hex":"#E8879B"},{"code":"3731","name":"Dusty Rose Very Dark","family":"Dusty Rose","ko":"더스티 로즈","hex":"#DA6783"},{"code":"3350","name":"Dusty Rose Ultra Dark","family":"Dusty Rose","ko":"더스티 로즈","hex":"#BC4365"},{"code":"150","name":"Dusty Rose Ultra Very Dark","family":"Dusty Rose","ko":"더스티 로즈","hex":"#AB0249"},{"code":"3689","name":"Mauve Light","family":"Mauve","ko":"모브","hex":"#FBBFC2"},{"code":"3688","name":"Mauve Medium","family":"Mauve","ko":"모브","hex":"#E7A9AC"},{"code":"3687","name":"Mauve","family":"Mauve","ko":"모브","hex":"#C96B70"},{"code":"3803","name":"Mauve Dark","family":"Mauve","ko":"모브","hex":"#AB3357"},{"code":"3685","name":"Mauve Very Dark","family":"Mauve","ko":"모브","hex":"#881531"},{"code":"605","name":"Cranberry Very Light","family":"Cranberry","ko":"크랜베리","hex":"#FFC0CD"},{"code":"604","name":"Cranberry Light","family":"Cranberry","ko":"크랜베리","hex":"#FFB0BE"},{"code":"603","name":"Cranberry","family":"Cranberry","ko":"크랜베리","hex":"#FFA4BE"},{"code":"602","name":"Cranberry Medium","family":"Cranberry","ko":"크랜베리","hex":"#E24874"},{"code":"601","name":"Cranberry Dark","family":"Cranberry","ko":"크랜베리","hex":"#D1286A"},{"code":"600","name":"Cranberry Very Dark","family":"Cranberry","ko":"크랜베리","hex":"#CD2F63"},{"code":"3806","name":"Cyclamen Pink Light","family":"Cyclamen Pink","ko":"","hex":"#FF8CAE"},{"code":"3805","name":"Cyclamen Pink","family":"Cyclamen Pink","ko":"","hex":"#F3478B"},{"code":"3804","name":"Cyclamen Pink Dark","family":"Cyclamen Pink","ko":"","hex":"#E02876"},{"code":"3609","name":"Plum Ultra Light","family":"Plum","ko":"플럼","hex":"#F4AED5"},{"code":"3608","name":"Plum Very Light","family":"Plum","ko":"플럼","hex":"#EA9CC4"},{"code":"3607","name":"Plum Light","family":"Plum","ko":"플럼","hex":"#C54989"},{"code":"718","name":"Plum","family":"Plum","ko":"플럼","hex":"#9C2462"},{"code":"917","name":"Plum Medium","family":"Plum","ko":"플럼","hex":"#9B1359"},{"code":"915","name":"Plum Dark","family":"Plum","ko":"플럼","hex":"#820043"},{"code":"225","name":"Shell Pink Ultra Very Light","family":"Shell Pink","ko":"셸 핑크","hex":"#FFDFD5"},{"code":"224","name":"Shell Pink Very Light","family":"Shell Pink","ko":"셸 핑크","hex":"#EBB7AF"},{"code":"152","name":"Shell Pink Medium Light","family":"Shell Pink","ko":"셸 핑크","hex":"#E2A099"},{"code":"223","name":"Shell Pink Light","family":"Shell Pink","ko":"셸 핑크","hex":"#CC847C"},{"code":"3722","name":"Shell Pink Medium","family":"Shell Pink","ko":"셸 핑크","hex":"#BC6C64"},{"code":"3721","name":"Shell Pink Dark","family":"Shell Pink","ko":"셸 핑크","hex":"#A14B51"},{"code":"221","name":"Shell Pink Very Dark","family":"Shell Pink","ko":"셸 핑크","hex":"#883E43"},{"code":"778","name":"Antique Mauve Very Light","family":"Antique Mauve","ko":"앤티크 모브","hex":"#DFB3BB"},{"code":"3727","name":"Antique Mauve Light","family":"Antique Mauve","ko":"앤티크 모브","hex":"#DBA9B2"},{"code":"316","name":"Antique Mauve Medium","family":"Antique Mauve","ko":"앤티크 모브","hex":"#B7737F"},{"code":"3726","name":"Antique Mauve Dark","family":"Antique Mauve","ko":"앤티크 모브","hex":"#9B5B66"},{"code":"315","name":"Antique Mauve Medium Dark","family":"Antique Mauve","ko":"앤티크 모브","hex":"#814952"},{"code":"3802","name":"Antique Mauve Very Dark","family":"Antique Mauve","ko":"앤티크 모브","hex":"#714149"},{"code":"902","name":"Garnet Very Dark","family":"Garnet","ko":"석류색","hex":"#822637"},{"code":"3743","name":"Antique Violet Very Light","family":"Antique Violet","ko":"앤티크 바이올렛","hex":"#D7CBD3"},{"code":"3042","name":"Antique Violet Light","family":"Antique Violet","ko":"앤티크 바이올렛","hex":"#B79DA7"},{"code":"3041","name":"Antique Violet Medium","family":"Antique Violet","ko":"앤티크 바이올렛","hex":"#956F7C"},{"code":"3740","name":"Antique Violet Dark","family":"Antique Violet","ko":"앤티크 바이올렛","hex":"#785762"},{"code":"3836","name":"Grape Light","family":"Grape","ko":"그레이프","hex":"#BA91AA"},{"code":"3835","name":"Grape Medium","family":"Grape","ko":"그레이프","hex":"#946083"},{"code":"3834","name":"Grape Dark","family":"Grape","ko":"그레이프","hex":"#72375D"},{"code":"154","name":"Grape Very Dark","family":"Grape","ko":"그레이프","hex":"#572433"},{"code":"211","name":"Lavender Light","family":"Lavender","ko":"라벤더","hex":"#E3CBE3"},{"code":"210","name":"Lavender Medium","family":"Lavender","ko":"라벤더","hex":"#C39FC3"},{"code":"209","name":"Lavender Dark","family":"Lavender","ko":"라벤더","hex":"#A37BA7"},{"code":"208","name":"Lavender Very Dark","family":"Lavender","ko":"라벤더","hex":"#835B8B"},{"code":"3837","name":"Lavender Ultra Dark","family":"Lavender","ko":"라벤더","hex":"#6C3A6E"},{"code":"327","name":"Violet Dark","family":"Violet","ko":"바이올렛","hex":"#633666"},{"code":"153","name":"Violet Very Light","family":"Violet","ko":"바이올렛","hex":"#E6CCD9"},{"code":"554","name":"Violet Light","family":"Violet","ko":"바이올렛","hex":"#DBB3CB"},{"code":"553","name":"Violet","family":"Violet","ko":"바이올렛","hex":"#A3638B"},{"code":"552","name":"Violet Medium","family":"Violet","ko":"바이올렛","hex":"#803A6B"},{"code":"550","name":"Violet Very Dark","family":"Violet","ko":"바이올렛","hex":"#5C184E"},{"code":"3747","name":"Blue Violet Very Light","family":"Blue Violet","ko":"블루 바이올렛","hex":"#D3D7ED"},{"code":"341","name":"Blue Violet Light","family":"Blue Violet","ko":"블루 바이올렛","hex":"#B7BFDD"},{"code":"156","name":"Blue Violet Medium Light","family":"Blue Violet","ko":"블루 바이올렛","hex":"#A3AED1"},{"code":"340","name":"Blue Violet Medium","family":"Blue Violet","ko":"블루 바이올렛","hex":"#ADA7C7"},{"code":"155","name":"Blue Violet Medium Dark","family":"Blue Violet","ko":"블루 바이올렛","hex":"#9891B6"},{"code":"3746","name":"Blue Violet Dark","family":"Blue Violet","ko":"블루 바이올렛","hex":"#776B98"},{"code":"333","name":"Blue Violet Very Dark","family":"Blue Violet","ko":"블루 바이올렛","hex":"#5C5478"},{"code":"157","name":"Cornflower Blue Very Light","family":"Cornflower Blue","ko":"콘플라워 블루","hex":"#BBC3D9"},{"code":"794","name":"Cornflower Blue Light","family":"Cornflower Blue","ko":"콘플라워 블루","hex":"#8F9CC1"},{"code":"793","name":"Cornflower Blue Medium","family":"Cornflower Blue","ko":"콘플라워 블루","hex":"#707DA2"},{"code":"3807","name":"Cornflower Blue","family":"Cornflower Blue","ko":"콘플라워 블루","hex":"#60678C"},{"code":"792","name":"Cornflower Blue Dark","family":"Cornflower Blue","ko":"콘플라워 블루","hex":"#555B7B"},{"code":"158","name":"Cornflower Blu Medium Very Dark","family":"Cornflower Blu","ko":"","hex":"#4C526E"},{"code":"791","name":"Cornflower Blue Very Dark","family":"Cornflower Blue","ko":"콘플라워 블루","hex":"#464563"},{"code":"3840","name":"Lavender Blue Light","family":"Lavender Blue","ko":"","hex":"#B0C0DA"},{"code":"3839","name":"Lavender Blue Medium","family":"Lavender Blue","ko":"","hex":"#7B8EAB"},{"code":"3838","name":"Lavender Blue Dark","family":"Lavender Blue","ko":"","hex":"#5C7294"},{"code":"800","name":"Delft Blue Pale","family":"Delft Blue","ko":"델프트 블루","hex":"#C0CCDE"},{"code":"809","name":"Delft Blue","family":"Delft Blue","ko":"델프트 블루","hex":"#94A8C6"},{"code":"799","name":"Delft Blue Medium","family":"Delft Blue","ko":"델프트 블루","hex":"#748EB6"},{"code":"798","name":"Delft Blue Dark","family":"Delft Blue","ko":"델프트 블루","hex":"#466A8E"},{"code":"797","name":"Royal Blue","family":"Royal Blue","ko":"","hex":"#13477D"},{"code":"796","name":"Royal Blue Dark","family":"Royal Blue","ko":"","hex":"#11416D"},{"code":"820","name":"Royal Blue Very Dark","family":"Royal Blue","ko":"","hex":"#0E365C"},{"code":"162","name":"Blue Ultra Very Light","family":"Blue","ko":"파랑","hex":"#DBECF5"},{"code":"827","name":"Blue Very Light","family":"Blue","ko":"파랑","hex":"#BDDDED"},{"code":"813","name":"Blue Light","family":"Blue","ko":"파랑","hex":"#A1C2D7"},{"code":"826","name":"Blue Medium","family":"Blue","ko":"파랑","hex":"#6B9EBF"},{"code":"825","name":"Blue Dark","family":"Blue","ko":"파랑","hex":"#4781A5"},{"code":"824","name":"Blue Very Dark","family":"Blue","ko":"파랑","hex":"#396987"},{"code":"996","name":"Electric Blue Medium","family":"Electric Blue","ko":"일렉트릭 블루","hex":"#30C2EC"},{"code":"3843","name":"Electric Blue","family":"Electric Blue","ko":"일렉트릭 블루","hex":"#14AAD0"},{"code":"995","name":"Electric Blue Dark","family":"Electric Blue","ko":"일렉트릭 블루","hex":"#2696B6"},{"code":"3846","name":"Turquoise Light Bright","family":"Turquoise","ko":"터쿼이즈","hex":"#06E3E6"},{"code":"3845","name":"Turquoise Medium Bright","family":"Turquoise","ko":"터쿼이즈","hex":"#04C4CA"},{"code":"3844","name":"Turquoise Dark Bright","family":"Turquoise","ko":"터쿼이즈","hex":"#12AEBA"},{"code":"159","name":"Gray Blue Light","family":"Gray Blue","ko":"그레이 블루","hex":"#C7CAD7"},{"code":"160","name":"Gray Blue Medium","family":"Gray Blue","ko":"그레이 블루","hex":"#999FB7"},{"code":"161","name":"Gray Blue","family":"Gray Blue","ko":"그레이 블루","hex":"#7880A4"},{"code":"3756","name":"Baby Blue Ultra Very Light","family":"Baby Blue","ko":"베이비 블루","hex":"#EEFCFC"},{"code":"775","name":"Baby Blue Very Light","family":"Baby Blue","ko":"베이비 블루","hex":"#D9EBF1"},{"code":"3841","name":"Baby Blue Pale","family":"Baby Blue","ko":"베이비 블루","hex":"#CDDFED"},{"code":"3325","name":"Baby Blue Light","family":"Baby Blue","ko":"베이비 블루","hex":"#B8D2E6"},{"code":"3755","name":"Baby Blue","family":"Baby Blue","ko":"베이비 블루","hex":"#93B4CE"},{"code":"334","name":"Baby Blue Medium","family":"Baby Blue","ko":"베이비 블루","hex":"#739FC1"},{"code":"322","name":"Baby Blue Dark","family":"Baby Blue","ko":"베이비 블루","hex":"#5A8FB8"},{"code":"312","name":"Baby Blue Very Dark","family":"Baby Blue","ko":"베이비 블루","hex":"#35668B"},{"code":"803","name":"Baby Blue Ultra Very Dark","family":"Baby Blue","ko":"베이비 블루","hex":"#2C597C"},{"code":"336","name":"Navy Blue","family":"Navy Blue","ko":"네이비 블루","hex":"#253B73"},{"code":"823","name":"Navy Blue Dark","family":"Navy Blue","ko":"네이비 블루","hex":"#213063"},{"code":"939","name":"Navy Blue Very Dark","family":"Navy Blue","ko":"네이비 블루","hex":"#1B2853"},{"code":"3753","name":"Antique Blue Ultra Very Light","family":"Antique Blue","ko":"앤티크 블루","hex":"#DBE2E9"},{"code":"3752","name":"Antique Blue Very Light","family":"Antique Blue","ko":"앤티크 블루","hex":"#C7D1DB"},{"code":"932","name":"Antique Blue Light","family":"Antique Blue","ko":"앤티크 블루","hex":"#A2B5C6"},{"code":"931","name":"Antique Blue Medium","family":"Antique Blue","ko":"앤티크 블루","hex":"#6A859E"},{"code":"930","name":"Antique Blue Dark","family":"Antique Blue","ko":"앤티크 블루","hex":"#455C71"},{"code":"3750","name":"Antique Blue Very Dark","family":"Antique Blue","ko":"앤티크 블루","hex":"#384C5E"},{"code":"828","name":"Sky Blue Very Light","family":"Sky Blue","ko":"하늘색","hex":"#C5E8ED"},{"code":"3761","name":"Sky Blue Light","family":"Sky Blue","ko":"하늘색","hex":"#ACD8E2"},{"code":"519","name":"Sky Blue","family":"Sky Blue","ko":"하늘색","hex":"#7EB1C8"},{"code":"518","name":"Wedgewood Light","family":"Wedgewood","ko":"","hex":"#4F93A7"},{"code":"3760","name":"Wedgewood Medium","family":"Wedgewood","ko":"","hex":"#3E85A2"},{"code":"517","name":"Wedgewood Dark","family":"Wedgewood","ko":"","hex":"#3B768F"},{"code":"3842","name":"Wedgewood Very Dark","family":"Wedgewood","ko":"","hex":"#32667C"},{"code":"311","name":"Navy Blue Medium","family":"Navy Blue","ko":"네이비 블루","hex":"#1C5066"},{"code":"747","name":"Peacock Blue Very Light","family":"Peacock Blue","ko":"","hex":"#E5FCFD"},{"code":"3766","name":"Peacock Blue Light","family":"Peacock Blue","ko":"","hex":"#99CFD9"},{"code":"807","name":"Peacock Blue","family":"Peacock Blue","ko":"","hex":"#64ABBA"},{"code":"806","name":"Peacock Blue Dark","family":"Peacock Blue","ko":"","hex":"#3D95A5"},{"code":"3765","name":"Peacock Blue Very Dark","family":"Peacock Blue","ko":"","hex":"#347F8C"},{"code":"3811","name":"Turquoise Very Light","family":"Turquoise","ko":"터쿼이즈","hex":"#BCE3E6"},{"code":"598","name":"Turquoise Light","family":"Turquoise","ko":"터쿼이즈","hex":"#90C3CC"},{"code":"597","name":"Turquoise","family":"Turquoise","ko":"터쿼이즈","hex":"#5BA3B3"},{"code":"3810","name":"Turquoise Dark","family":"Turquoise","ko":"터쿼이즈","hex":"#488E9A"},{"code":"3809","name":"Turquoise Very Dark","family":"Turquoise","ko":"터쿼이즈","hex":"#3F7C85"},{"code":"3808","name":"Turquoise Ultra Very Dark","family":"Turquoise","ko":"터쿼이즈","hex":"#366970"},{"code":"928","name":"Gray Green Very Light","family":"Gray Green","ko":"","hex":"#DDE3E3"},{"code":"927","name":"Gray Green Light","family":"Gray Green","ko":"","hex":"#BDCBCB"},{"code":"926","name":"Gray Green Medium","family":"Gray Green","ko":"","hex":"#98AEAE"},{"code":"3768","name":"Gray Green Dark","family":"Gray Green","ko":"","hex":"#657F7F"},{"code":"924","name":"Gray Green Very Dark","family":"Gray Green","ko":"","hex":"#566A6A"},{"code":"3849","name":"Teal Green Light","family":"Teal Green","ko":"","hex":"#52B3AE"},{"code":"3848","name":"Teal Green Medium","family":"Teal Green","ko":"","hex":"#419392"},{"code":"3847","name":"Teal Green Dark","family":"Teal Green","ko":"","hex":"#347D75"},{"code":"964","name":"Seagreen Light","family":"Seagreen","ko":"시그린","hex":"#A9E2D8"},{"code":"959","name":"Seagreen Medium","family":"Seagreen","ko":"시그린","hex":"#59C7B4"},{"code":"958","name":"Seagreen Dark","family":"Seagreen","ko":"시그린","hex":"#3EB6A1"},{"code":"3812","name":"Seagreen Very Dark","family":"Seagreen","ko":"시그린","hex":"#2F8C84"},{"code":"3851","name":"Green Bright Light","family":"Green Bright","ko":"","hex":"#49B3A1"},{"code":"943","name":"Aquamarine Medium","family":"Aquamarine","ko":"아쿠아마린","hex":"#3D9384"},{"code":"3850","name":"Green Bright Dark","family":"Green Bright","ko":"","hex":"#378477"},{"code":"993","name":"Aquamarine Very Light","family":"Aquamarine","ko":"아쿠아마린","hex":"#90C0B4"},{"code":"992","name":"Aquamarine Light","family":"Aquamarine","ko":"아쿠아마린","hex":"#6FAE9F"},{"code":"3814","name":"Aquamarine","family":"Aquamarine","ko":"아쿠아마린","hex":"#508B7D"},{"code":"991","name":"Aquamarine Dark","family":"Aquamarine","ko":"아쿠아마린","hex":"#477B6E"},{"code":"966","name":"Baby Green Medium","family":"Baby Green","ko":"베이비 그린","hex":"#B9D7C0"},{"code":"564","name":"Jade Very Light","family":"Jade","ko":"제이드","hex":"#A7CDAF"},{"code":"563","name":"Jade Light","family":"Jade","ko":"제이드","hex":"#8FC098"},{"code":"562","name":"Jade Medium","family":"Jade","ko":"제이드","hex":"#53976A"},{"code":"505","name":"Jade Green","family":"Jade Green","ko":"","hex":"#338362"},{"code":"3817","name":"Celadon Green Light","family":"Celadon Green","ko":"","hex":"#99C3AA"},{"code":"3816","name":"Celadon Green","family":"Celadon Green","ko":"","hex":"#65A57D"},{"code":"163","name":"Celadon Green Medium","family":"Celadon Green","ko":"","hex":"#4D8361"},{"code":"3815","name":"Celadon Green Dark","family":"Celadon Green","ko":"","hex":"#477759"},{"code":"561","name":"Jade Very Dark","family":"Jade","ko":"제이드","hex":"#2C6A45"},{"code":"504","name":"Blue Green Very Light","family":"Blue Green","ko":"블루 그린","hex":"#C4DECC"},{"code":"3813","name":"Blue Green Light","family":"Blue Green","ko":"블루 그린","hex":"#B2D4BD"},{"code":"503","name":"Blue Green Medium","family":"Blue Green","ko":"블루 그린","hex":"#7BAC94"},{"code":"502","name":"Blue Green","family":"Blue Green","ko":"블루 그린","hex":"#5B9071"},{"code":"501","name":"Blue Green Dark","family":"Blue Green","ko":"블루 그린","hex":"#396F52"},{"code":"500","name":"Blue Green Very Dark","family":"Blue Green","ko":"블루 그린","hex":"#044D33"},{"code":"955","name":"Nile Green Light","family":"Nile Green","ko":"나일 그린","hex":"#A2D6AD"},{"code":"954","name":"Nile Green","family":"Nile Green","ko":"나일 그린","hex":"#88BA91"},{"code":"913","name":"Nile Green Medium","family":"Nile Green","ko":"나일 그린","hex":"#6DAB77"},{"code":"912","name":"Emerald Green Light","family":"Emerald Green","ko":"에메랄드 그린","hex":"#1B9D6B"},{"code":"911","name":"Emerald Green Medium","family":"Emerald Green","ko":"에메랄드 그린","hex":"#189065"},{"code":"910","name":"Emerald Green Dark","family":"Emerald Green","ko":"에메랄드 그린","hex":"#187E56"},{"code":"909","name":"Emerald Green Very Dark","family":"Emerald Green","ko":"에메랄드 그린","hex":"#156F49"},{"code":"3818","name":"Emerald Green Ultra Very Dark","family":"Emerald Green","ko":"에메랄드 그린","hex":"#115A3B"},{"code":"369","name":"Pistachio Green Very Light","family":"Pistachio Green","ko":"피스타치오 그린","hex":"#D7EDCC"},{"code":"368","name":"Pistachio Green Light","family":"Pistachio Green","ko":"피스타치오 그린","hex":"#A6C298"},{"code":"320","name":"Pistachio Green Medium","family":"Pistachio Green","ko":"피스타치오 그린","hex":"#69885A"},{"code":"367","name":"Pistachio Green Dark","family":"Pistachio Green","ko":"피스타치오 그린","hex":"#617A52"},{"code":"319","name":"Pistachio Green Very Dark","family":"Pistachio Green","ko":"피스타치오 그린","hex":"#205F2E"},{"code":"890","name":"Pistachio Green Ultra Dark","family":"Pistachio Green","ko":"피스타치오 그린","hex":"#174923"},{"code":"164","name":"Forest Green Light","family":"Forest Green","ko":"포레스트 그린","hex":"#C8D8B8"},{"code":"989","name":"Forest Green","family":"Forest Green","ko":"포레스트 그린","hex":"#8DA675"},{"code":"988","name":"Forest Green Medium","family":"Forest Green","ko":"포레스트 그린","hex":"#738B5B"},{"code":"987","name":"Forest Green Dark","family":"Forest Green","ko":"포레스트 그린","hex":"#587141"},{"code":"986","name":"Forest Green Very Dark","family":"Forest Green","ko":"포레스트 그린","hex":"#405230"},{"code":"772","name":"Yellow Green Very Light","family":"Yellow Green","ko":"옐로 그린","hex":"#E4ECD4"},{"code":"3348","name":"Yellow Green Light","family":"Yellow Green","ko":"옐로 그린","hex":"#CCD9B1"},{"code":"3347","name":"Yellow Green Medium","family":"Yellow Green","ko":"옐로 그린","hex":"#71935C"},{"code":"3346","name":"Hunter Green","family":"Hunter Green","ko":"","hex":"#406A3A"},{"code":"3345","name":"Hunter Green Dark","family":"Hunter Green","ko":"","hex":"#1B5915"},{"code":"895","name":"Hunter Green Very Dark","family":"Hunter Green","ko":"","hex":"#1B5300"},{"code":"704","name":"Chartreuse Bright","family":"Chartreuse","ko":"","hex":"#9ECF34"},{"code":"703","name":"Chartreuse","family":"Chartreuse","ko":"","hex":"#7BB547"},{"code":"702","name":"Kelly Green","family":"Kelly Green","ko":"켈리 그린","hex":"#47A72F"},{"code":"701","name":"Green Light","family":"Green","ko":"초록","hex":"#3F8F29"},{"code":"700","name":"Green Bright","family":"Green","ko":"초록","hex":"#07731B"},{"code":"699","name":"Green","family":"Green","ko":"초록","hex":"#056517"},{"code":"907","name":"Parrot Green Light","family":"Parrot Green","ko":"패럿 그린","hex":"#C7E666"},{"code":"906","name":"Parrot Green Medium","family":"Parrot Green","ko":"패럿 그린","hex":"#7FB335"},{"code":"905","name":"Parrot Green Dark","family":"Parrot Green","ko":"패럿 그린","hex":"#628A28"},{"code":"904","name":"Parrot Green Very Dark","family":"Parrot Green","ko":"패럿 그린","hex":"#557822"},{"code":"472","name":"Avocado Green Ultra Light","family":"Avocado Green","ko":"아보카도 그린","hex":"#D8E498"},{"code":"471","name":"Avocado Green Very Light","family":"Avocado Green","ko":"아보카도 그린","hex":"#AEBF79"},{"code":"470","name":"Avocado Green Light","family":"Avocado Green","ko":"아보카도 그린","hex":"#94AB4F"},{"code":"469","name":"Avocado Green","family":"Avocado Green","ko":"아보카도 그린","hex":"#72843C"},{"code":"937","name":"Avocado Green Medium","family":"Avocado Green","ko":"아보카도 그린","hex":"#627133"},{"code":"936","name":"Avocado Green Very Dark","family":"Avocado Green","ko":"아보카도 그린","hex":"#4C5826"},{"code":"935","name":"Avocado Green Dark","family":"Avocado Green","ko":"아보카도 그린","hex":"#424D21"},{"code":"934","name":"Avocado Green Black","family":"Avocado Green","ko":"아보카도 그린","hex":"#313919"},{"code":"523","name":"Fern Green Light","family":"Fern Green","ko":"펀 그린","hex":"#ABB197"},{"code":"3053","name":"Green Gray","family":"Green Gray","ko":"","hex":"#9CA482"},{"code":"3052","name":"Green Gray Medium","family":"Green Gray","ko":"","hex":"#889268"},{"code":"3051","name":"Green Gray Dark","family":"Green Gray","ko":"","hex":"#5F6648"},{"code":"524","name":"Fern Green Very Light","family":"Fern Green","ko":"펀 그린","hex":"#C4CDAC"},{"code":"522","name":"Fern Green","family":"Fern Green","ko":"펀 그린","hex":"#969E7E"},{"code":"520","name":"Fern Green Dark","family":"Fern Green","ko":"펀 그린","hex":"#666D4F"},{"code":"3364","name":"Pine Green","family":"Pine Green","ko":"파인 그린","hex":"#83975F"},{"code":"3363","name":"Pine Green Medium","family":"Pine Green","ko":"파인 그린","hex":"#728256"},{"code":"3362","name":"Pine Green Dark","family":"Pine Green","ko":"파인 그린","hex":"#5E6B47"},{"code":"165","name":"Moss Green Very Light","family":"Moss Green","ko":"모스 그린","hex":"#EFF4A4"},{"code":"3819","name":"Moss Green Light","family":"Moss Green","ko":"모스 그린","hex":"#E0E868"},{"code":"166","name":"Moss Green Medium Light","family":"Moss Green","ko":"모스 그린","hex":"#C0C840"},{"code":"581","name":"Moss Green","family":"Moss Green","ko":"모스 그린","hex":"#A7AE38"},{"code":"580","name":"Moss Green Dark","family":"Moss Green","ko":"모스 그린","hex":"#888D33"},{"code":"734","name":"Olive Green Light","family":"Olive Green","ko":"올리브 그린","hex":"#C7C077"},{"code":"733","name":"Olive Green Medium","family":"Olive Green","ko":"올리브 그린","hex":"#BCB34C"},{"code":"732","name":"Olive Green","family":"Olive Green","ko":"올리브 그린","hex":"#948C36"},{"code":"731","name":"Olive Green Dark","family":"Olive Green","ko":"올리브 그린","hex":"#938B37"},{"code":"730","name":"Olive Green Very Dark","family":"Olive Green","ko":"올리브 그린","hex":"#827B30"},{"code":"3013","name":"Khaki Green Light","family":"Khaki Green","ko":"카키 그린","hex":"#B9B982"},{"code":"3012","name":"Khaki Green Medium","family":"Khaki Green","ko":"카키 그린","hex":"#A6A75D"},{"code":"3011","name":"Khaki Green Dark","family":"Khaki Green","ko":"카키 그린","hex":"#898A58"},{"code":"372","name":"Mustard Light","family":"Mustard","ko":"","hex":"#CCB784"},{"code":"371","name":"Mustard","family":"Mustard","ko":"","hex":"#BFA671"},{"code":"370","name":"Mustard Medium","family":"Mustard","ko":"","hex":"#B89D64"},{"code":"834","name":"Golden Olive Very Light","family":"Golden Olive","ko":"황금 올리브","hex":"#DBBE7F"},{"code":"833","name":"Golden Olive Light","family":"Golden Olive","ko":"황금 올리브","hex":"#C8AB6C"},{"code":"832","name":"Golden Olive","family":"Golden Olive","ko":"황금 올리브","hex":"#BD9B51"},{"code":"831","name":"Golden Olive Medium","family":"Golden Olive","ko":"황금 올리브","hex":"#AA8F56"},{"code":"830","name":"Golden Olive Dark","family":"Golden Olive","ko":"황금 올리브","hex":"#8D784B"},{"code":"829","name":"Golden Olive Very Dark","family":"Golden Olive","ko":"황금 올리브","hex":"#7E6B42"},{"code":"613","name":"Drab Brown Very Light","family":"Drab Brown","ko":"드랩 브라운","hex":"#DCC4AA"},{"code":"612","name":"Drab Brown Light","family":"Drab Brown","ko":"드랩 브라운","hex":"#BC9A78"},{"code":"611","name":"Drab Brown","family":"Drab Brown","ko":"드랩 브라운","hex":"#967656"},{"code":"610","name":"Drab Brown Dark","family":"Drab Brown","ko":"드랩 브라운","hex":"#796047"},{"code":"3047","name":"Yellow Beige Light","family":"Yellow Beige","ko":"옐로 베이지","hex":"#E7D6C1"},{"code":"3046","name":"Yellow Beige Medium","family":"Yellow Beige","ko":"옐로 베이지","hex":"#D8BC9A"},{"code":"3045","name":"Yellow Beige Dark","family":"Yellow Beige","ko":"옐로 베이지","hex":"#BC966A"},{"code":"167","name":"Yellow Beige Very Dark","family":"Yellow Beige","ko":"옐로 베이지","hex":"#A77C49"},{"code":"746","name":"Off White","family":"Off White","ko":"","hex":"#FCFCEE"},{"code":"677","name":"Old Gold Very Light","family":"Old Gold","ko":"올드 골드","hex":"#F5ECCB"},{"code":"422","name":"Hazelnut Brown Light","family":"Hazelnut Brown","ko":"헤이즐넛 브라운","hex":"#C69F7B"},{"code":"3828","name":"Hazelnut Brown","family":"Hazelnut Brown","ko":"헤이즐넛 브라운","hex":"#B78B61"},{"code":"420","name":"Hazelnut Brown Dark","family":"Hazelnut Brown","ko":"헤이즐넛 브라운","hex":"#A07042"},{"code":"869","name":"Hazelnut Brown Very Dark","family":"Hazelnut Brown","ko":"헤이즐넛 브라운","hex":"#835E39"},{"code":"728","name":"Topaz","family":"Topaz","ko":"토파즈","hex":"#E4B468"},{"code":"783","name":"Topaz Medium","family":"Topaz","ko":"토파즈","hex":"#CE9124"},{"code":"782","name":"Topaz Dark","family":"Topaz","ko":"토파즈","hex":"#AE7720"},{"code":"781","name":"Topaz Very Dark","family":"Topaz","ko":"토파즈","hex":"#A26D20"},{"code":"780","name":"Topaz Ultra Very Dark","family":"Topaz","ko":"토파즈","hex":"#94631A"},{"code":"676","name":"Old Gold Light","family":"Old Gold","ko":"올드 골드","hex":"#E5CE97"},{"code":"729","name":"Old Gold Medium","family":"Old Gold","ko":"올드 골드","hex":"#D0A53E"},{"code":"680","name":"Old Gold Dark","family":"Old Gold","ko":"올드 골드","hex":"#BC8D0E"},{"code":"3829","name":"Old Gold Very Dark","family":"Old Gold","ko":"올드 골드","hex":"#A98204"},{"code":"3822","name":"Straw Light","family":"Straw","ko":"스트로","hex":"#F6DC98"},{"code":"3821","name":"Straw","family":"Straw","ko":"스트로","hex":"#F3CE75"},{"code":"3820","name":"Straw Dark","family":"Straw","ko":"스트로","hex":"#DFB65F"},{"code":"3852","name":"Straw Very Dark","family":"Straw","ko":"스트로","hex":"#CD9D37"},{"code":"445","name":"Lemon Light","family":"Lemon","ko":"레몬","hex":"#FFFB8B"},{"code":"307","name":"Lemon","family":"Lemon","ko":"레몬","hex":"#FDED54"},{"code":"973","name":"Canary Bright","family":"Canary","ko":"카나리","hex":"#FFE300"},{"code":"444","name":"Lemon Dark","family":"Lemon","ko":"레몬","hex":"#FFD600"},{"code":"3078","name":"Golden Yellow Very Light","family":"Golden Yellow","ko":"골든 옐로","hex":"#FDF9CD"},{"code":"727","name":"Topaz Very Light","family":"Topaz","ko":"토파즈","hex":"#FFF1AF"},{"code":"726","name":"Topaz Light","family":"Topaz","ko":"토파즈","hex":"#FDD755"},{"code":"725","name":"Topaz Medium Light","family":"Topaz","ko":"토파즈","hex":"#FFC840"},{"code":"972","name":"Canary Deep","family":"Canary","ko":"카나리","hex":"#FFB515"},{"code":"745","name":"Yellow Pale Light","family":"Yellow","ko":"노랑","hex":"#FFE9AD"},{"code":"744","name":"Yellow Pale","family":"Yellow","ko":"노랑","hex":"#FFE793"},{"code":"743","name":"Yellow Medium","family":"Yellow","ko":"노랑","hex":"#FED376"},{"code":"742","name":"Tangerine Light","family":"Tangerine","ko":"귤색","hex":"#FFBF57"},{"code":"741","name":"Tangerine Medium","family":"Tangerine","ko":"귤색","hex":"#FFA32B"},{"code":"740","name":"Tangerine","family":"Tangerine","ko":"귤색","hex":"#FF8B00"},{"code":"970","name":"Pumpkin Light","family":"Pumpkin","ko":"","hex":"#F78B13"},{"code":"971","name":"Pumpkin","family":"Pumpkin","ko":"","hex":"#F67F00"},{"code":"947","name":"Burnt Orange","family":"Burnt Orange","ko":"","hex":"#FF7B4D"},{"code":"946","name":"Burnt Orange Medium","family":"Burnt Orange","ko":"","hex":"#EB6307"},{"code":"900","name":"Burnt Orange Dark","family":"Burnt Orange","ko":"","hex":"#D15807"},{"code":"967","name":"Apricot Very Light","family":"Apricot","ko":"애프리콧","hex":"#FFDED5"},{"code":"3824","name":"Apricot Light","family":"Apricot","ko":"애프리콧","hex":"#FECDC2"},{"code":"3341","name":"Apricot","family":"Apricot","ko":"애프리콧","hex":"#FCAB98"},{"code":"3340","name":"Apricot Medium","family":"Apricot","ko":"애프리콧","hex":"#FF836F"},{"code":"608","name":"Orange Bright","family":"Orange","ko":"주황","hex":"#FD5D35"},{"code":"606","name":"Orange Red Bright","family":"Orange Red","ko":"","hex":"#FA3203"},{"code":"951","name":"Tawny Light","family":"Tawny","ko":"","hex":"#FFE2CF"},{"code":"3856","name":"Mahogany Ultra Very Light","family":"Mahogany","ko":"마호가니","hex":"#FFD3B5"},{"code":"722","name":"Orange Spice Light","family":"Orange Spice","ko":"오렌지 스파이스","hex":"#F7976F"},{"code":"721","name":"Orange Spice Medium","family":"Orange Spice","ko":"오렌지 스파이스","hex":"#F27842"},{"code":"720","name":"Orange Spice Dark","family":"Orange Spice","ko":"오렌지 스파이스","hex":"#E55C1F"},{"code":"3825","name":"Pumpkin Pale","family":"Pumpkin","ko":"","hex":"#FDBD96"},{"code":"922","name":"Copper Light","family":"Copper","ko":"구리색","hex":"#E27323"},{"code":"921","name":"Copper","family":"Copper","ko":"구리색","hex":"#C66218"},{"code":"920","name":"Copper Medium","family":"Copper","ko":"구리색","hex":"#AC5414"},{"code":"919","name":"Red Copper","family":"Red Copper","ko":"","hex":"#A64510"},{"code":"918","name":"Red Copper Dark","family":"Red Copper","ko":"","hex":"#82340A"},{"code":"3770","name":"Tawny Very Light","family":"Tawny","ko":"","hex":"#FFEEE3"},{"code":"945","name":"Tawny","family":"Tawny","ko":"","hex":"#FBD5BB"},{"code":"402","name":"Mahogany Very Light","family":"Mahogany","ko":"마호가니","hex":"#F7A777"},{"code":"3776","name":"Mahogany Light","family":"Mahogany","ko":"마호가니","hex":"#CF7939"},{"code":"301","name":"Mahogany Medium","family":"Mahogany","ko":"마호가니","hex":"#B35F2B"},{"code":"400","name":"Mahogany Dark","family":"Mahogany","ko":"마호가니","hex":"#8F430F"},{"code":"300","name":"Mahogany Very Dark","family":"Mahogany","ko":"마호가니","hex":"#6F2F00"},{"code":"3823","name":"Yellow Ultra Pale","family":"Yellow","ko":"노랑","hex":"#FFFDE3"},{"code":"3855","name":"Autumn Gold Light","family":"Autumn Gold","ko":"어텀 골드","hex":"#FAD396"},{"code":"3854","name":"Autumn Gold Medium","family":"Autumn Gold","ko":"어텀 골드","hex":"#F2AF68"},{"code":"3853","name":"Autumn Gold Dark","family":"Autumn Gold","ko":"어텀 골드","hex":"#F29746"},{"code":"3827","name":"Golden Brown Pale","family":"Golden Brown","ko":"","hex":"#F7BB77"},{"code":"977","name":"Golden Brown Light","family":"Golden Brown","ko":"","hex":"#DC9C56"},{"code":"976","name":"Golden Brown Medium","family":"Golden Brown","ko":"","hex":"#C28142"},{"code":"3826","name":"Golden Brown","family":"Golden Brown","ko":"","hex":"#AD7239"},{"code":"975","name":"Golden Brown Dark","family":"Golden Brown","ko":"","hex":"#914F12"},{"code":"948","name":"Peach Very Light","family":"Peach","ko":"피치","hex":"#FEE7DA"},{"code":"754","name":"Peach Light","family":"Peach","ko":"피치","hex":"#F7CBBF"},{"code":"3771","name":"Terra Cotta Ultra Very Light","family":"Terra Cotta","ko":"테라코타","hex":"#F4BBA9"},{"code":"758","name":"Terra Cotta Very Light","family":"Terra Cotta","ko":"테라코타","hex":"#EEAA9B"},{"code":"3778","name":"Terra Cotta Light","family":"Terra Cotta","ko":"테라코타","hex":"#D98978"},{"code":"356","name":"Terra Cotta Medium","family":"Terra Cotta","ko":"테라코타","hex":"#C56A5B"},{"code":"3830","name":"Terra Cotta","family":"Terra Cotta","ko":"테라코타","hex":"#B95544"},{"code":"355","name":"Terra Cotta Dark","family":"Terra Cotta","ko":"테라코타","hex":"#984436"},{"code":"3777","name":"Terra Cotta Very Dark","family":"Terra Cotta","ko":"테라코타","hex":"#863022"},{"code":"3779","name":"Rosewood Ultra Very Light","family":"Rosewood","ko":"","hex":"#F8CAC8"},{"code":"3859","name":"Rosewood Light","family":"Rosewood","ko":"","hex":"#BA8B7C"},{"code":"3858","name":"Rosewood Medium","family":"Rosewood","ko":"","hex":"#964A3F"},{"code":"3857","name":"Rosewood Dark","family":"Rosewood","ko":"","hex":"#68251A"},{"code":"3774","name":"Desert Sand Very Light","family":"Desert Sand","ko":"데저트 샌드","hex":"#F3E1D7"},{"code":"950","name":"Desert Sand Light","family":"Desert Sand","ko":"데저트 샌드","hex":"#EED3C4"},{"code":"3064","name":"Desert Sand","family":"Desert Sand","ko":"데저트 샌드","hex":"#C48E70"},{"code":"407","name":"Desert Sand Dark","family":"Desert Sand","ko":"데저트 샌드","hex":"#BB8161"},{"code":"3773","name":"Desert Sand Medium","family":"Desert Sand","ko":"데저트 샌드","hex":"#B67552"},{"code":"3772","name":"Desert Sand Very Dark","family":"Desert Sand","ko":"데저트 샌드","hex":"#A06C50"},{"code":"632","name":"Desert Sand Ultra Very Dark","family":"Desert Sand","ko":"데저트 샌드","hex":"#875539"},{"code":"453","name":"Shell Gray Light","family":"Shell Gray","ko":"","hex":"#D7CECB"},{"code":"452","name":"Shell Gray Medium","family":"Shell Gray","ko":"","hex":"#C0B3AE"},{"code":"451","name":"Shell Gray Dark","family":"Shell Gray","ko":"","hex":"#917B73"},{"code":"3861","name":"Cocoa Light","family":"Cocoa","ko":"코코아","hex":"#A68881"},{"code":"3860","name":"Cocoa","family":"Cocoa","ko":"코코아","hex":"#7D5D57"},{"code":"779","name":"Cocoa Dark","family":"Cocoa","ko":"코코아","hex":"#624B45"},{"code":"712","name":"Cream","family":"Cream","ko":"크림","hex":"#FFFBEF"},{"code":"739","name":"Tan Ultra Very Light","family":"Tan","ko":"황갈색","hex":"#F8E4C8"},{"code":"738","name":"Tan Very Light","family":"Tan","ko":"황갈색","hex":"#ECCC9E"},{"code":"437","name":"Tan Light","family":"Tan","ko":"황갈색","hex":"#E4BB8E"},{"code":"436","name":"Tan","family":"Tan","ko":"황갈색","hex":"#CB9051"},{"code":"435","name":"Brown Very Light","family":"Brown","ko":"갈색","hex":"#B87748"},{"code":"434","name":"Brown Light","family":"Brown","ko":"갈색","hex":"#985E33"},{"code":"433","name":"Brown Medium","family":"Brown","ko":"갈색","hex":"#7A451F"},{"code":"801","name":"Coffee Brown Dark","family":"Coffee Brown","ko":"커피 브라운","hex":"#653919"},{"code":"898","name":"Coffee Brown Very Dark","family":"Coffee Brown","ko":"커피 브라운","hex":"#492A13"},{"code":"938","name":"Coffee Brown Ultra Dark","family":"Coffee Brown","ko":"커피 브라운","hex":"#361F0E"},{"code":"3371","name":"Black Brown","family":"Black Brown","ko":"","hex":"#1E1108"},{"code":"543","name":"Beige Brown Ultra Very Light","family":"Beige Brown","ko":"베이지 브라운","hex":"#F2E3CE"},{"code":"3864","name":"Mocha Beige Light","family":"Mocha Beige","ko":"","hex":"#CBB69C"},{"code":"3863","name":"Mocha Beige Medium","family":"Mocha Beige","ko":"","hex":"#A4835C"},{"code":"3862","name":"Mocha Beige Dark","family":"Mocha Beige","ko":"","hex":"#8A6E4E"},{"code":"3031","name":"Mocha Brown Very Dark","family":"Mocha Brown","ko":"모카 브라운","hex":"#4B3C2A"},{"code":"B5200","name":"Snow White","family":"Snow White","ko":"스노 화이트","hex":"#FFFFFF"},{"code":"White","name":"White","family":"White","ko":"흰색","hex":"#FCFBF8"},{"code":"3865","name":"Winter White","family":"Winter White","ko":"","hex":"#F9F7F1"},{"code":"Ecru","name":"Ecru","family":"Ecru","ko":"에크루","hex":"#F0EADA"},{"code":"822","name":"Beige Gray Light","family":"Beige Gray","ko":"베이지 그레이","hex":"#E7E2D3"},{"code":"644","name":"Beige Gray Medium","family":"Beige Gray","ko":"베이지 그레이","hex":"#DDD8CB"},{"code":"642","name":"Beige Gray Dark","family":"Beige Gray","ko":"베이지 그레이","hex":"#A49878"},{"code":"640","name":"Beige Gray Very Dark","family":"Beige Gray","ko":"베이지 그레이","hex":"#857B61"},{"code":"3787","name":"Brown Gray Dark","family":"Brown Gray","ko":"","hex":"#625D50"},{"code":"3021","name":"Brown Gray Very Dark","family":"Brown Gray","ko":"","hex":"#4F4B41"},{"code":"3024","name":"Brown Gray Very Light","family":"Brown Gray","ko":"","hex":"#EBEAE7"},{"code":"3023","name":"Brown Gray Light","family":"Brown Gray","ko":"","hex":"#B1AA97"},{"code":"3022","name":"Brown Gray Medium","family":"Brown Gray","ko":"","hex":"#8E9078"},{"code":"535","name":"Ash Gray Very Light","family":"Ash Gray","ko":"","hex":"#636458"},{"code":"3033","name":"Mocha Brown Very Light","family":"Mocha Brown","ko":"모카 브라운","hex":"#E3D8CC"},{"code":"3782","name":"Mocha Brown Light","family":"Mocha Brown","ko":"모카 브라운","hex":"#D2BCA6"},{"code":"3032","name":"Mocha Brown Medium","family":"Mocha Brown","ko":"모카 브라운","hex":"#B39F8B"},{"code":"3790","name":"Beige Gray Ultra Dark","family":"Beige Gray","ko":"베이지 그레이","hex":"#7F6A55"},{"code":"3781","name":"Mocha Brown Dark","family":"Mocha Brown","ko":"모카 브라운","hex":"#6B5743"},{"code":"3866","name":"Mocha Brown Ultra Very Light","family":"Mocha Brown","ko":"모카 브라운","hex":"#FAF6F0"},{"code":"842","name":"Beige Brown Very Light","family":"Beige Brown","ko":"베이지 브라운","hex":"#D1BAA1"},{"code":"841","name":"Beige Brown Light","family":"Beige Brown","ko":"베이지 브라운","hex":"#B69B7E"},{"code":"840","name":"Beige Brown Medium","family":"Beige Brown","ko":"베이지 브라운","hex":"#9A7C5C"},{"code":"839","name":"Beige Brown Dark","family":"Beige Brown","ko":"베이지 브라운","hex":"#675541"},{"code":"838","name":"Beige Brown Very Dark","family":"Beige Brown","ko":"베이지 브라운","hex":"#594937"},{"code":"3072","name":"Beaver Gray Very Light","family":"Beaver Gray","ko":"","hex":"#E6E8E8"},{"code":"648","name":"Beaver Gray Light","family":"Beaver Gray","ko":"","hex":"#BCB4AC"},{"code":"647","name":"Beaver Gray Medium","family":"Beaver Gray","ko":"","hex":"#B0A69C"},{"code":"646","name":"Beaver Gray Dark","family":"Beaver Gray","ko":"","hex":"#877D73"},{"code":"645","name":"Beaver Gray Very Dark","family":"Beaver Gray","ko":"","hex":"#6E655C"},{"code":"844","name":"Beaver Gray Ultra Dark","family":"Beaver Gray","ko":"","hex":"#484848"},{"code":"762","name":"Pearl Gray Very Light","family":"Pearl Gray","ko":"","hex":"#ECECEC"},{"code":"415","name":"Pearl Gray","family":"Pearl Gray","ko":"","hex":"#D3D3D6"},{"code":"318","name":"Steel Gray Light","family":"Steel Gray","ko":"스틸 그레이","hex":"#ABABAB"},{"code":"414","name":"Steel Gray Dark","family":"Steel Gray","ko":"스틸 그레이","hex":"#8C8C8C"},{"code":"168","name":"Pewter Very Light","family":"Pewter","ko":"","hex":"#D1D1D1"},{"code":"169","name":"Pewter Light","family":"Pewter","ko":"","hex":"#848484"},{"code":"317","name":"Pewter Gray","family":"Pewter Gray","ko":"퓨터 그레이","hex":"#6C6C6C"},{"code":"413","name":"Pewter Gray Dark","family":"Pewter Gray","ko":"퓨터 그레이","hex":"#565656"},{"code":"3799","name":"Pewter Gray Very Dark","family":"Pewter Gray","ko":"퓨터 그레이","hex":"#424242"},{"code":"310","name":"Black","family":"Black","ko":"검정","hex":"#000000"}]} };
+const __m = {};
+__m.color = (function () {
+
+/* color.js — 색 변환과 색 거리 계산 (화면과 무관한 순수 계산) */
+
+/** '#RRGGBB' -> [r,g,b] */
+function hexToRgb(hex) {
+  const m = String(hex).trim().replace('#', '');
+  const s = m.length === 3 ? m.split('').map((c) => c + c).join('') : m;
+  if (!/^[0-9a-fA-F]{6}$/.test(s)) return null;
+  return [parseInt(s.slice(0, 2), 16), parseInt(s.slice(2, 4), 16), parseInt(s.slice(4, 6), 16)];
+}
+
+function rgbToHex(r, g, b) {
+  const h = (n) => Math.max(0, Math.min(255, Math.round(n))).toString(16).padStart(2, '0');
+  return `#${h(r)}${h(g)}${h(b)}`.toUpperCase();
+}
+
+/* sRGB -> 선형 RGB */
+function toLinear(c) {
+  const v = c / 255;
+  return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+}
+
+/** sRGB -> CIE Lab (D65 기준) */
+function rgbToLab(r, g, b) {
+  const R = toLinear(r);
+  const G = toLinear(g);
+  const B = toLinear(b);
+  // sRGB -> XYZ (D65)
+  let x = (R * 0.4124564 + G * 0.3575761 + B * 0.1804375) / 0.95047;
+  let y = (R * 0.2126729 + G * 0.7151522 + B * 0.0721750) / 1.0;
+  let z = (R * 0.0193339 + G * 0.1191920 + B * 0.9503041) / 1.08883;
+  const f = (t) => (t > 0.008856451679 ? Math.cbrt(t) : t * 7.787037037 + 16 / 116);
+  x = f(x); y = f(y); z = f(z);
+  return [116 * y - 16, 500 * (x - y), 200 * (y - z)];
+}
+
+/** Lab -> sRGB (미리보기용) */
+function labToRgb(L, a, bb) {
+  const fy = (L + 16) / 116;
+  const fx = fy + a / 500;
+  const fz = fy - bb / 200;
+  const inv = (t) => (t ** 3 > 0.008856451679 ? t ** 3 : (t - 16 / 116) / 7.787037037);
+  const x = inv(fx) * 0.95047;
+  const y = inv(fy);
+  const z = inv(fz) * 1.08883;
+  let R = x * 3.2404542 + y * -1.5371385 + z * -0.4985314;
+  let G = x * -0.9692660 + y * 1.8760108 + z * 0.0415560;
+  let B = x * 0.0556434 + y * -0.2040259 + z * 1.0572252;
+  const enc = (c) => {
+    const v = c <= 0.0031308 ? c * 12.92 : 1.055 * c ** (1 / 2.4) - 0.055;
+    return Math.max(0, Math.min(255, Math.round(v * 255)));
+  };
+  R = enc(R); G = enc(G); B = enc(B);
+  return [R, G, B];
+}
+
+const DEG = Math.PI / 180;
+
+/**
+ * CIEDE2000 색 차이. 사람이 느끼는 "얼마나 다른가"에 가장 가까운 값입니다.
+ * 1 이하면 거의 구분 못 하고, 2~3이면 나란히 두어야 겨우 보이는 차이입니다.
+ */
+function deltaE2000(lab1, lab2) {
+  const [L1, a1, b1] = lab1;
+  const [L2, a2, b2] = lab2;
+  const C1 = Math.hypot(a1, b1);
+  const C2 = Math.hypot(a2, b2);
+  const Cb = (C1 + C2) / 2;
+  const G = 0.5 * (1 - Math.sqrt(Cb ** 7 / (Cb ** 7 + 25 ** 7)));
+  const ap1 = a1 * (1 + G);
+  const ap2 = a2 * (1 + G);
+  const Cp1 = Math.hypot(ap1, b1);
+  const Cp2 = Math.hypot(ap2, b2);
+  const hp1 = Cp1 === 0 ? 0 : (Math.atan2(b1, ap1) / DEG + 360) % 360;
+  const hp2 = Cp2 === 0 ? 0 : (Math.atan2(b2, ap2) / DEG + 360) % 360;
+
+  const dL = L2 - L1;
+  const dC = Cp2 - Cp1;
+  let dhp = 0;
+  if (Cp1 * Cp2 !== 0) {
+    dhp = hp2 - hp1;
+    if (dhp > 180) dhp -= 360;
+    else if (dhp < -180) dhp += 360;
+  }
+  const dH = 2 * Math.sqrt(Cp1 * Cp2) * Math.sin((dhp / 2) * DEG);
+
+  const Lb = (L1 + L2) / 2;
+  const Cpb = (Cp1 + Cp2) / 2;
+  let hpb;
+  if (Cp1 * Cp2 === 0) hpb = hp1 + hp2;
+  else if (Math.abs(hp1 - hp2) <= 180) hpb = (hp1 + hp2) / 2;
+  else hpb = (hp1 + hp2 + (hp1 + hp2 < 360 ? 360 : -360)) / 2;
+
+  const T = 1
+    - 0.17 * Math.cos((hpb - 30) * DEG)
+    + 0.24 * Math.cos(2 * hpb * DEG)
+    + 0.32 * Math.cos((3 * hpb + 6) * DEG)
+    - 0.20 * Math.cos((4 * hpb - 63) * DEG);
+  const dTheta = 30 * Math.exp(-(((hpb - 275) / 25) ** 2));
+  const Rc = 2 * Math.sqrt(Cpb ** 7 / (Cpb ** 7 + 25 ** 7));
+  const Sl = 1 + (0.015 * (Lb - 50) ** 2) / Math.sqrt(20 + (Lb - 50) ** 2);
+  const Sc = 1 + 0.045 * Cpb;
+  const Sh = 1 + 0.015 * Cpb * T;
+  const Rt = -Math.sin(2 * dTheta * DEG) * Rc;
+
+  return Math.sqrt(
+    (dL / Sl) ** 2 + (dC / Sc) ** 2 + (dH / Sh) ** 2 + Rt * (dC / Sc) * (dH / Sh),
+  );
+}
+
+/** 사람이 읽기 쉬운 차이 설명 */
+function deltaEWord(de) {
+  if (de < 1) return '거의 같음';
+  if (de < 2) return '아주 비슷';
+  if (de < 3.5) return '비슷';
+  if (de < 6) return '조금 다름';
+  if (de < 12) return '꽤 다름';
+  return '많이 다름';
+}
+
+/** 글자를 배경 위에 얹을 때 검정/흰색 중 어느 쪽이 읽기 쉬운지 */
+function readableInk(r, g, b) {
+  const lum = 0.2126 * toLinear(r) + 0.7152 * toLinear(g) + 0.0722 * toLinear(b);
+  return lum > 0.4 ? '#000000' : '#ffffff';
+}
+
+/** 빨간선 판정: 붉은 기가 뚜렷하고 어둡지 않은 픽셀 */
+function isRedPixel(r, g, b, strength = 1) {
+  // strength 가 클수록 까다롭게(진한 빨강만), 작을수록 넉넉하게 잡습니다.
+  const gap = r - Math.max(g, b);
+  const minGap = 26 + 26 * strength;
+  const ratio = 1.15 + 0.22 * strength;
+  return (
+    r >= 60
+    && gap >= minGap
+    && r >= g * ratio
+    && r >= b * ratio
+  );
+}
+
+  return { hexToRgb, rgbToHex, rgbToLab, labToRgb, deltaE2000, deltaEWord, readableInk, isRedPixel };
+})();
+
+__m.detect = (function () {
+  const { isRedPixel } = __m.color;
+/* detect.js — 사진에서 빨간선을 찾아 자를 영역을 계산합니다.
+   원본 픽셀은 읽기만 하고 절대 고치지 않습니다. */
+
+
+/** 분석은 작은 사본에서 하고, 결과 좌표만 원본 크기로 되돌립니다. */
+const ANALYSIS_MAX = 1400;
+
+/**
+ * 빨간 픽셀 지도를 만듭니다.
+ * @returns {Uint8Array} 0/1 마스크
+ */
+function buildRedMask(imageData, strength) {
+  const { data, width: w, height: h } = imageData;
+  const mask = new Uint8Array(w * h);
+  for (let i = 0, p = 0; i < mask.length; i += 1, p += 4) {
+    if (data[p + 3] < 32) continue;
+    if (isRedPixel(data[p], data[p + 1], data[p + 2], strength)) mask[i] = 1;
+  }
+  return mask;
+}
+
+/** 끊긴 선을 이어 붙이기 위해 마스크를 조금 부풀립니다(가로·세로 분리 처리). */
+function dilate(mask, w, h, radius) {
+  if (radius <= 0) return mask;
+  const tmp = new Uint8Array(w * h);
+  for (let y = 0; y < h; y += 1) {
+    const row = y * w;
+    let run = -1;
+    for (let x = 0; x < w; x += 1) {
+      if (mask[row + x]) run = x;
+      if (run >= 0 && x - run <= radius) tmp[row + x] = 1;
+    }
+    run = -1;
+    for (let x = w - 1; x >= 0; x -= 1) {
+      if (mask[row + x]) run = x;
+      if (run >= 0 && run - x <= radius) tmp[row + x] = 1;
+    }
+  }
+  const out = new Uint8Array(w * h);
+  for (let x = 0; x < w; x += 1) {
+    let run = -1;
+    for (let y = 0; y < h; y += 1) {
+      if (tmp[y * w + x]) run = y;
+      if (run >= 0 && y - run <= radius) out[y * w + x] = 1;
+    }
+    run = -1;
+    for (let y = h - 1; y >= 0; y -= 1) {
+      if (tmp[y * w + x]) run = y;
+      if (run >= 0 && run - y <= radius) out[y * w + x] = 1;
+    }
+  }
+  return out;
+}
+
+/** 이어진 빨간 덩어리를 하나씩 찾아냅니다. */
+function findBlobs(mask, w, h, minPixels) {
+  const seen = new Uint8Array(w * h);
+  const stack = new Int32Array(w * h);
+  const blobs = [];
+  for (let start = 0; start < mask.length; start += 1) {
+    if (!mask[start] || seen[start]) continue;
+    let top = 0;
+    stack[top] = start;
+    top += 1;
+    seen[start] = 1;
+    let count = 0;
+    let x0 = w; let y0 = h; let x1 = -1; let y1 = -1;
+    while (top > 0) {
+      top -= 1;
+      const idx = stack[top];
+      const x = idx % w;
+      const y = (idx - x) / w;
+      count += 1;
+      if (x < x0) x0 = x;
+      if (x > x1) x1 = x;
+      if (y < y0) y0 = y;
+      if (y > y1) y1 = y;
+      for (let dy = -1; dy <= 1; dy += 1) {
+        for (let dx = -1; dx <= 1; dx += 1) {
+          if (!dx && !dy) continue;
+          const nx = x + dx;
+          const ny = y + dy;
+          if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+          const n = ny * w + nx;
+          if (mask[n] && !seen[n]) {
+            seen[n] = 1;
+            stack[top] = n;
+            top += 1;
+          }
+        }
+      }
+    }
+    if (count >= minPixels) {
+      blobs.push({ x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1, pixels: count });
+    }
+  }
+  return blobs;
+}
+
+/**
+ * 덩어리 모양을 보고 어떤 표시인지 짐작합니다.
+ *  - 'frame' : 네모/동그라미로 둘러친 표시  → 안쪽을 자릅니다
+ *  - 'line'  : 길쭉한 줄                    → 줄 옆 띠를 자릅니다
+ *  - 'mark'  : 작은 점·체크 표시            → 표시 둘레를 자릅니다
+ */
+function classifyBlob(blob, w, h) {
+  const fill = blob.pixels / (blob.w * blob.h);
+  const long = Math.max(blob.w, blob.h);
+  const short = Math.min(blob.w, blob.h);
+  const bigEnough = blob.w >= w * 0.06 && blob.h >= h * 0.04;
+  if (bigEnough && fill < 0.45) return 'frame';
+  if (long >= short * 3.5 && long >= Math.min(w, h) * 0.08) return 'line';
+  return 'mark';
+}
+
+/** 선 굵기를 대충 추정합니다(둘레 대비 픽셀 수). */
+function strokeWidth(blob) {
+  const perimeter = 2 * (blob.w + blob.h);
+  return Math.max(1, Math.min(Math.round(blob.pixels / Math.max(1, perimeter)), Math.min(blob.w, blob.h) / 3));
+}
+
+/** 네모 안의 평균 채도(색이 얼마나 짙은지). 종이 여백은 0 에 가깝습니다. */
+function regionChroma(imageData, rect) {
+  const { data, width: w, height: h } = imageData;
+  const x0 = Math.max(0, Math.round(rect.x));
+  const y0 = Math.max(0, Math.round(rect.y));
+  const x1 = Math.min(w, Math.round(rect.x + rect.w));
+  const y1 = Math.min(h, Math.round(rect.y + rect.h));
+  if (x1 <= x0 || y1 <= y0) return -1;
+  const step = Math.max(1, Math.round(Math.sqrt(((x1 - x0) * (y1 - y0)) / 3000)));
+  let sum = 0;
+  let n = 0;
+  for (let y = y0; y < y1; y += step) {
+    for (let x = x0; x < x1; x += step) {
+      const p = (y * w + x) * 4;
+      const r = data[p];
+      const g = data[p + 1];
+      const b = data[p + 2];
+      if (isRedPixel(r, g, b, 1)) continue; // 표시해 둔 빨간선은 빼고 봅니다
+      sum += Math.max(r, g, b) - Math.min(r, g, b);
+      n += 1;
+    }
+  }
+  return n ? sum / n : -1;
+}
+
+function clampBox(b, w, h) {
+  const x = Math.max(0, Math.round(b.x));
+  const y = Math.max(0, Math.round(b.y));
+  const x2 = Math.min(w, Math.round(b.x + b.w));
+  const y2 = Math.min(h, Math.round(b.y + b.h));
+  return { x, y, w: Math.max(1, x2 - x), h: Math.max(1, y2 - y) };
+}
+
+/**
+ * 덩어리 하나를 자를 상자로 바꿉니다.
+ * @param {object} opt
+ *   mode    'auto' | 'inside' | 'outside' | 'band'
+ *   pad     여백 비율(상자 크기 기준, 0.0~0.5)
+ *   band    띠 두께 비율(짧은 변 기준)
+ *   side    'both' | 'before' | 'after'  (띠를 선의 어느 쪽에 둘지)
+ */
+function blobToBox(blob, w, h, opt) {
+  const kind = opt.mode === 'auto' ? classifyBlob(blob, w, h) : opt.mode;
+  const t = strokeWidth(blob);
+
+  if (kind === 'frame' || kind === 'inside') {
+    // 빨간 테두리 안쪽만. 선 굵기 + 1px 만큼 더 들어가서 빨강이 섞이지 않게 합니다.
+    const inset = t + 1 + Math.round(Math.min(blob.w, blob.h) * opt.pad * 0.5);
+    return clampBox({
+      x: blob.x + inset, y: blob.y + inset, w: blob.w - inset * 2, h: blob.h - inset * 2,
+    }, w, h);
+  }
+
+  if (kind === 'line' || kind === 'band') {
+    const horizontal = blob.w >= blob.h;
+    const thickness = Math.max(12, Math.round(Math.min(w, h) * opt.band));
+    const grow = Math.round((horizontal ? blob.w : blob.h) * opt.pad);
+    const side = opt.side === 'auto' ? pickSide(blob, horizontal, thickness, t, w, h, opt) : opt.side;
+    if (horizontal) {
+      const cy = blob.y + blob.h / 2;
+      let top = cy - thickness / 2;
+      let height = thickness;
+      if (side === 'before') { top = blob.y - t - thickness; height = thickness; }
+      if (side === 'after') { top = blob.y + blob.h + t; height = thickness; }
+      return clampBox({ x: blob.x - grow, y: top, w: blob.w + grow * 2, h: height }, w, h);
+    }
+    const cx = blob.x + blob.w / 2;
+    let left = cx - thickness / 2;
+    if (side === 'before') left = blob.x - t - thickness;
+    if (side === 'after') left = blob.x + blob.w + t;
+    return clampBox({ x: left, y: blob.y - grow, w: thickness, h: blob.h + grow * 2 }, w, h);
+  }
+
+  // 작은 표시: 표시를 둘러싼 넉넉한 네모
+  const grow = Math.max(8, Math.round(Math.max(blob.w, blob.h) * (0.5 + opt.pad)));
+  return clampBox({
+    x: blob.x - grow, y: blob.y - grow, w: blob.w + grow * 2, h: blob.h + grow * 2,
+  }, w, h);
+}
+
+/** 줄 양옆 중 색이 더 짙은 쪽(=실이 있는 쪽)을 고릅니다. */
+function pickSide(blob, horizontal, thickness, t, w, h, opt) {
+  if (!opt.pixels) return 'both';
+  const rectFor = (which) => {
+    if (horizontal) {
+      const top = which === 'before' ? blob.y - t - thickness : blob.y + blob.h + t;
+      return { x: blob.x, y: top, w: blob.w, h: thickness };
+    }
+    const left = which === 'before' ? blob.x - t - thickness : blob.x + blob.w + t;
+    return { x: left, y: blob.y, w: thickness, h: blob.h };
+  };
+  const before = regionChroma(opt.pixels, rectFor('before'));
+  const after = regionChroma(opt.pixels, rectFor('after'));
+  const middle = regionChroma(opt.pixels, horizontal
+    ? { x: blob.x, y: blob.y + blob.h / 2 - thickness / 2, w: blob.w, h: thickness }
+    : { x: blob.x + blob.w / 2 - thickness / 2, y: blob.y, w: thickness, h: blob.h });
+  const best = Math.max(before, after, middle);
+  if (best <= 0) return 'both';
+  if (best === middle) return 'both';
+  return best === before ? 'before' : 'after';
+}
+
+/** 거의 같은 자리에 겹쳐 잡힌 상자를 하나로 합칩니다. */
+function dedupe(boxes, tolerance = 0.6) {
+  const out = [];
+  for (const b of boxes) {
+    const hit = out.find((o) => overlapRatio(o, b) > tolerance);
+    if (hit) {
+      const x = Math.min(hit.x, b.x);
+      const y = Math.min(hit.y, b.y);
+      hit.w = Math.max(hit.x + hit.w, b.x + b.w) - x;
+      hit.h = Math.max(hit.y + hit.h, b.y + b.h) - y;
+      hit.x = x;
+      hit.y = y;
+    } else out.push({ ...b });
+  }
+  return out;
+}
+
+/** 네모 안에 든 원래 빨간 픽셀 수 */
+function countInside(mask, w, h, box) {
+  const x0 = Math.max(0, box.x);
+  const y0 = Math.max(0, box.y);
+  const x1 = Math.min(w, box.x + box.w);
+  const y1 = Math.min(h, box.y + box.h);
+  let n = 0;
+  for (let y = y0; y < y1; y += 1) {
+    const row = y * w;
+    for (let x = x0; x < x1; x += 1) if (mask[row + x]) n += 1;
+  }
+  return Math.max(1, n);
+}
+
+function overlapRatio(a, b) {
+  const x = Math.max(a.x, b.x);
+  const y = Math.max(a.y, b.y);
+  const x2 = Math.min(a.x + a.w, b.x + b.w);
+  const y2 = Math.min(a.y + a.h, b.y + b.h);
+  if (x2 <= x || y2 <= y) return 0;
+  const inter = (x2 - x) * (y2 - y);
+  return inter / Math.min(a.w * a.h, b.w * b.h);
+}
+
+/**
+ * 사진 전체에서 빨간선을 찾아 자를 상자 목록을 돌려줍니다.
+ * @param {ImageData} imageData 분석용(축소) 픽셀
+ * @param {number} scale 원본 대비 축소 비율 (원본좌표 = 분석좌표 / scale)
+ */
+function detectRedRegions(imageData, scale, opt) {
+  const { width: w, height: h } = imageData;
+  const raw = buildRedMask(imageData, opt.strength);
+  const radius = Math.max(1, Math.round(Math.min(w, h) * opt.join));
+  const mask = dilate(raw, w, h, radius);
+  const minPixels = Math.max(24, Math.round(w * h * 0.00004));
+  const blobs = findBlobs(mask, w, h, minPixels)
+    .filter((b) => Math.hypot(b.w, b.h) >= Math.hypot(w, h) * 0.02);
+
+  const minSide = Math.min(w, h);
+  const thickLimit = Math.max(5, minSide * 0.022);
+  const withPixels = { ...opt, pixels: imageData };
+
+  const boxes = blobs.map((b) => {
+    // 부풀린 만큼 되돌려서 원래 선 위치로 맞춥니다.
+    // 굵기는 부풀리기 전(raw) 픽셀 수로 재야 실제 선 굵기가 나옵니다.
+    const tight = {
+      x: b.x + radius,
+      y: b.y + radius,
+      w: Math.max(1, b.w - radius * 2),
+      h: Math.max(1, b.h - radius * 2),
+      pixels: countInside(raw, w, h, b),
+    };
+    if (opt.ignoreSolid !== false && strokeWidth(tight) > thickLimit) return null;
+    const box = blobToBox(tight, w, h, withPixels);
+    return {
+      x: Math.round(box.x / scale),
+      y: Math.round(box.y / scale),
+      w: Math.max(2, Math.round(box.w / scale)),
+      h: Math.max(2, Math.round(box.h / scale)),
+      kind: opt.mode === 'auto' ? classifyBlob(tight, w, h) : opt.mode,
+    };
+  }).filter(Boolean);
+  return dedupe(boxes);
+}
+
+  return { ANALYSIS_MAX, buildRedMask, dilate, findBlobs, classifyBlob, strokeWidth, regionChroma, blobToBox, dedupe, overlapRatio, detectRedRegions };
+})();
+
+__m.crop = (function () {
+
+/* crop.js — 잘라내기 · 순서 정렬 · 이어붙이기
+   실 색을 지키기 위한 규칙:
+   1) 자를 때 크기를 바꾸지 않습니다(1:1 복사).
+   2) 부드럽게 하기(보간)를 끕니다.
+   3) 저장은 무손실 PNG 로만 합니다. JPEG 은 색이 미세하게 흔들립니다.
+   4) 필터·보정·투명도 합성을 전혀 쓰지 않습니다. */
+
+/** 색 관리가 끼어들지 않도록 sRGB 로 고정한 캔버스 */
+function makeCanvas(w, h) {
+  const c = document.createElement('canvas');
+  c.width = Math.max(1, Math.round(w));
+  c.height = Math.max(1, Math.round(h));
+  return c;
+}
+
+function context2d(canvas, opts = {}) {
+  const ctx = canvas.getContext('2d', { colorSpace: 'srgb', willReadFrequently: !!opts.read });
+  ctx.imageSmoothingEnabled = false;
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.filter = 'none';
+  return ctx;
+}
+
+/** 원본에서 상자 하나를 1:1 로 떠냅니다. */
+function cropCanvas(source, box) {
+  const x = Math.max(0, Math.round(box.x));
+  const y = Math.max(0, Math.round(box.y));
+  const w = Math.max(1, Math.min(Math.round(box.w), source.width - x));
+  const h = Math.max(1, Math.min(Math.round(box.h), source.height - y));
+  const c = makeCanvas(w, h);
+  const ctx = context2d(c);
+  ctx.drawImage(source, x, y, w, h, 0, 0, w, h);
+  return c;
+}
+
+function canvasToBlob(canvas) {
+  return new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+}
+
+/* ------------------------------------------------------------------ 정렬 */
+
+/**
+ * 상자를 사람이 읽는 순서로 줄 세웁니다.
+ *  'reading' 위→아래 줄 단위, 줄 안에서는 왼→오른쪽 (기본)
+ *  'column'  왼→오른쪽 칸 단위, 칸 안에서는 위→아래
+ *  'top' 위에서 아래로만 / 'left' 왼쪽에서 오른쪽으로만
+ *  'manual'  손으로 정한 순서 그대로
+ */
+function sortBoxes(boxes, mode) {
+  const list = boxes.slice();
+  if (mode === 'manual') return list;
+  if (mode === 'top') return list.sort((a, b) => (a.y - b.y) || (a.x - b.x));
+  if (mode === 'left') return list.sort((a, b) => (a.x - b.x) || (a.y - b.y));
+
+  const vertical = mode === 'column';
+  const sizes = list.map((b) => (vertical ? b.w : b.h)).sort((a, b) => a - b);
+  const mid = sizes.length ? sizes[Math.floor(sizes.length / 2)] : 1;
+  const tol = Math.max(8, mid * 0.6);
+
+  const lanes = [];
+  const byMain = list.slice().sort((a, b) => (vertical ? a.x - b.x : a.y - b.y));
+  for (const b of byMain) {
+    const start = vertical ? b.x : b.y;
+    const lane = lanes.find((l) => Math.abs(l.at - start) <= tol);
+    if (lane) {
+      lane.items.push(b);
+      lane.at = (lane.at * (lane.items.length - 1) + start) / lane.items.length;
+    } else lanes.push({ at: start, items: [b] });
+  }
+  lanes.sort((a, b) => a.at - b.at);
+  const out = [];
+  for (const lane of lanes) {
+    lane.items.sort((a, b) => (vertical ? a.y - b.y : a.x - b.x));
+    out.push(...lane.items);
+  }
+  return out;
+}
+
+const SORT_LABELS = {
+  reading: '가로줄 순서 (위→아래, 왼→오른쪽)',
+  column: '세로줄 순서 (왼→오른쪽, 위→아래)',
+  top: '위에서 아래로',
+  left: '왼쪽에서 오른쪽으로',
+  manual: '내가 정한 순서',
+};
+
+/* -------------------------------------------------------------- 이어붙이기 */
+
+/**
+ * 잘라낸 조각들을 한 장으로 이어붙입니다.
+ * 조각은 절대 늘이거나 줄이지 않고, 남는 자리는 배경색으로 채웁니다.
+ * 글자(번호·색코드)는 조각 바깥의 라벨 칸에만 그려서 실 픽셀을 건드리지 않습니다.
+ *
+ * @param {Array<{canvas:HTMLCanvasElement,label:string,sub:string}>} items
+ * @param {object} opt layout('row'|'column'|'grid') gap bg columns label labelH
+ */
+function stitch(items, opt) {
+  const gap = Math.max(0, Math.round(opt.gap ?? 12));
+  const pad = Math.max(0, Math.round(opt.pad ?? gap));
+  const showLabel = !!opt.label;
+  const labelH = showLabel ? Math.max(18, Math.round(opt.labelH ?? 34)) : 0;
+  const cells = items.map((it) => ({
+    it, w: it.canvas.width, h: it.canvas.height + labelH,
+  }));
+
+  let cols;
+  if (opt.layout === 'row') cols = cells.length;
+  else if (opt.layout === 'column') cols = 1;
+  else cols = Math.max(1, Math.min(opt.columns || Math.ceil(Math.sqrt(cells.length)), cells.length));
+  const rows = Math.ceil(cells.length / cols) || 1;
+
+  const colW = new Array(cols).fill(0);
+  const rowH = new Array(rows).fill(0);
+  cells.forEach((c, i) => {
+    const col = i % cols;
+    const row = Math.floor(i / cols);
+    colW[col] = Math.max(colW[col], c.w);
+    rowH[row] = Math.max(rowH[row], c.h);
+  });
+
+  const width = pad * 2 + colW.reduce((a, b) => a + b, 0) + gap * (cols - 1);
+  const height = pad * 2 + rowH.reduce((a, b) => a + b, 0) + gap * (rows - 1);
+  const canvas = makeCanvas(width, height);
+  const ctx = context2d(canvas);
+
+  if (opt.bg && opt.bg !== 'transparent') {
+    ctx.fillStyle = opt.bg;
+    ctx.fillRect(0, 0, width, height);
+  }
+
+  const xs = [];
+  let acc = pad;
+  for (let i = 0; i < cols; i += 1) { xs.push(acc); acc += colW[i] + gap; }
+  const ys = [];
+  acc = pad;
+  for (let i = 0; i < rows; i += 1) { ys.push(acc); acc += rowH[i] + gap; }
+
+  cells.forEach((c, i) => {
+    const col = i % cols;
+    const row = Math.floor(i / cols);
+    // 칸 안에서 가운데 정렬 (크기는 그대로)
+    const x = Math.round(xs[col] + (colW[col] - c.w) / 2);
+    const y = Math.round(ys[row] + (rowH[row] - c.h) / 2);
+    ctx.drawImage(c.it.canvas, x, y);
+    if (showLabel) {
+      const ly = y + c.it.canvas.height;
+      ctx.fillStyle = opt.ink || '#111111';
+      const size = Math.max(11, Math.round(labelH * 0.46));
+      ctx.font = `600 ${size}px system-ui, -apple-system, "Noto Sans KR", sans-serif`;
+      ctx.textBaseline = 'top';
+      ctx.textAlign = 'center';
+      const cx = x + c.it.canvas.width / 2;
+      ctx.fillText(c.it.label || '', cx, ly + 3, colW[col]);
+      if (c.it.sub) {
+        ctx.font = `400 ${Math.max(10, size - 3)}px system-ui, -apple-system, "Noto Sans KR", sans-serif`;
+        ctx.globalAlpha = 0.72;
+        ctx.fillText(c.it.sub, cx, ly + 5 + size, colW[col]);
+        ctx.globalAlpha = 1;
+      }
+    }
+  });
+
+  return canvas;
+}
+
+  return { makeCanvas, context2d, cropCanvas, canvasToBlob, sortBoxes, SORT_LABELS, stitch };
+})();
+
+__m.sample = (function () {
+  const { rgbToLab, labToRgb, isRedPixel } = __m.color;
+/* sample.js — 잘라낸 조각에서 "실 색"이 무엇인지 뽑아냅니다.
+   여기서 계산한 값은 색코드를 찾는 데에만 쓰고, 사진 픽셀은 건드리지 않습니다. */
+
+
+/**
+ * 조각의 대표색을 고릅니다.
+ * 방법: 빨간선·종이 흰 여백을 뺀 뒤 Lab 공간에서 가장 두꺼운 색 덩어리를 찾아
+ *       그 덩어리의 평균을 씁니다. 얼룩이나 그림자에 잘 흔들리지 않습니다.
+ *
+ * @param {ImageData} img
+ * @param {object} opt  {skipRed:boolean, skipPaper:boolean, inset:number(0~0.45)}
+ * @returns {{rgb:number[], coverage:number, used:number}|null}
+ */
+function representativeColor(img, opt = {}) {
+  const skipRed = opt.skipRed !== false;
+  const skipPaper = opt.skipPaper !== false;
+  const inset = Math.min(0.45, Math.max(0, opt.inset ?? 0.12));
+
+  const { data, width: w, height: h } = img;
+  const x0 = Math.floor(w * inset);
+  const x1 = Math.max(x0 + 1, Math.ceil(w * (1 - inset)));
+  const y0 = Math.floor(h * inset);
+  const y1 = Math.max(y0 + 1, Math.ceil(h * (1 - inset)));
+  const step = Math.max(1, Math.round(Math.sqrt(((x1 - x0) * (y1 - y0)) / 24000)));
+
+  const collect = (dropPaper) => {
+    const pts = [];
+    for (let y = y0; y < y1; y += step) {
+      for (let x = x0; x < x1; x += step) {
+        const p = (y * w + x) * 4;
+        if (data[p + 3] < 128) continue;
+        const r = data[p];
+        const g = data[p + 1];
+        const b = data[p + 2];
+        if (skipRed && isRedPixel(r, g, b, 1)) continue;
+        const lab = rgbToLab(r, g, b);
+        if (dropPaper) {
+          const chroma = Math.hypot(lab[1], lab[2]);
+          if (lab[0] > 90 && chroma < 7) continue; // 하얀 종이
+          if (lab[0] < 8 && chroma < 7) continue; // 새까만 그림자
+        }
+        pts.push(lab);
+      }
+    }
+    return pts;
+  };
+
+  let pts = collect(skipPaper);
+  const total = Math.ceil((x1 - x0) / step) * Math.ceil((y1 - y0) / step);
+  // 흰 실·검은 실이라면 종이로 오해한 것이므로 되돌립니다.
+  if (skipPaper && pts.length < total * 0.15) pts = collect(false);
+  if (!pts.length) return null;
+
+  // Lab 공간을 격자로 나눠 가장 붐비는 칸을 찾습니다.
+  const BL = 6;
+  const BA = 8;
+  const bins = new Map();
+  for (const lab of pts) {
+    const key = `${Math.round(lab[0] / BL)}|${Math.round(lab[1] / BA)}|${Math.round(lab[2] / BA)}`;
+    const bin = bins.get(key);
+    if (bin) bin.push(lab);
+    else bins.set(key, [lab]);
+  }
+  let best = null;
+  for (const bin of bins.values()) if (!best || bin.length > best.length) best = bin;
+
+  // 가장 붐비는 칸 주변까지 모아 평균을 냅니다.
+  const center = mean(best);
+  const near = pts.filter((lab) => Math.abs(lab[0] - center[0]) <= BL
+    && Math.abs(lab[1] - center[1]) <= BA * 1.5
+    && Math.abs(lab[2] - center[2]) <= BA * 1.5);
+  const avg = mean(near.length ? near : best);
+  return {
+    rgb: labToRgb(avg[0], avg[1], avg[2]),
+    coverage: near.length / pts.length,
+    used: pts.length,
+  };
+}
+
+function mean(list) {
+  let L = 0; let a = 0; let b = 0;
+  for (const v of list) { L += v[0]; a += v[1]; b += v[2]; }
+  return [L / list.length, a / list.length, b / list.length];
+}
+
+/** 스포이드: 그 자리 픽셀 색을 그대로 (보정 없이) 읽습니다. */
+function pixelAt(img, x, y) {
+  const px = Math.max(0, Math.min(img.width - 1, Math.round(x)));
+  const py = Math.max(0, Math.min(img.height - 1, Math.round(y)));
+  const p = (py * img.width + px) * 4;
+  return [img.data[p], img.data[p + 1], img.data[p + 2]];
+}
+
+/** 스포이드(넓게): 주변 사각형의 중앙값. 사진 노이즈를 피하고 싶을 때 씁니다. */
+function medianAround(img, x, y, radius = 2) {
+  const rs = []; const gs = []; const bs = [];
+  for (let dy = -radius; dy <= radius; dy += 1) {
+    for (let dx = -radius; dx <= radius; dx += 1) {
+      const [r, g, b] = pixelAt(img, x + dx, y + dy);
+      rs.push(r); gs.push(g); bs.push(b);
+    }
+  }
+  const mid = (arr) => { arr.sort((a, b) => a - b); return arr[Math.floor(arr.length / 2)]; };
+  return [mid(rs), mid(gs), mid(bs)];
+}
+
+  return { representativeColor, pixelAt, medianAround };
+})();
+
+__m.palette = (function () {
+  const { hexToRgb, rgbToLab, deltaE2000, rgbToHex } = __m.color;
+/* palette.js — 실 책자(색상표) 관리와 가장 가까운 색 찾기 */
+
+
+const CUSTOM_KEY = 'floss.palettes.v1';
+
+/** 색 목록에 Lab 값을 미리 계산해 붙여 둡니다(비교를 빠르게 하려고). */
+function prepare(palette) {
+  const colors = palette.colors
+    .map((c) => {
+      const rgb = hexToRgb(c.hex);
+      if (!rgb) return null;
+      return {
+        code: String(c.code).trim(),
+        name: c.name || '',
+        family: c.family || '',
+        ko: c.ko || '',
+        hex: rgbToHex(rgb[0], rgb[1], rgb[2]),
+        rgb,
+        lab: rgbToLab(rgb[0], rgb[1], rgb[2]),
+      };
+    })
+    .filter(Boolean);
+  return { ...palette, colors };
+}
+
+const cache = new Map();
+
+async function loadBuiltin(id = 'dmc') {
+  if (cache.has(id)) return cache.get(id);
+  // 한 파일짜리 페이지에서는 색상표가 페이지 안에 함께 들어 있습니다.
+  const embedded = globalThis.__FLOSS_DATA__ && globalThis.__FLOSS_DATA__[id];
+  if (embedded) {
+    const ready = prepare(embedded);
+    cache.set(id, ready);
+    return ready;
+  }
+  const res = await fetch(`./data/${id}.json`, { cache: 'force-cache' });
+  if (!res.ok) throw new Error(`색상표를 불러오지 못했습니다 (${res.status})`);
+  const p = prepare(await res.json());
+  cache.set(id, p);
+  return p;
+}
+
+function loadCustomList() {
+  try {
+    const raw = localStorage.getItem(CUSTOM_KEY);
+    if (!raw) return [];
+    const list = JSON.parse(raw);
+    return Array.isArray(list) ? list : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function saveCustomList(list) {
+  localStorage.setItem(CUSTOM_KEY, JSON.stringify(list));
+  cache.clear();
+}
+
+async function loadPalette(id) {
+  const custom = loadCustomList().find((p) => p.id === id);
+  if (custom) {
+    if (!cache.has(id)) cache.set(id, prepare(custom));
+    return cache.get(id);
+  }
+  return loadBuiltin(id);
+}
+
+/**
+ * 색상표 파일을 읽어 들입니다.
+ * CSV: 번호,이름,색코드  (머리글 줄이 있어도 알아서 건너뜁니다)
+ * JSON: {name, colors:[{code,name,hex}]} 또는 [{code,name,hex}]
+ */
+function parsePaletteText(text, fallbackName) {
+  const trimmed = text.trim();
+  let name = fallbackName;
+  let rows = [];
+
+  if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+    const data = JSON.parse(trimmed);
+    const arr = Array.isArray(data) ? data : data.colors;
+    if (!Array.isArray(arr)) throw new Error('colors 목록을 찾지 못했습니다.');
+    if (!Array.isArray(data) && data.name) name = data.name;
+    rows = arr.map((c) => ({
+      code: c.code ?? c.number ?? c.no ?? '',
+      name: c.name ?? c.description ?? '',
+      hex: c.hex ?? c.color ?? c.rgb ?? '',
+    }));
+  } else {
+    const lines = trimmed.split(/\r?\n/).filter((l) => l.trim());
+    for (const line of lines) {
+      const cells = splitCsvLine(line);
+      if (cells.length < 2) continue;
+
+      // 색을 적은 칸 찾기. '001' 같은 번호를 색으로 오해하지 않도록 까다롭게 봅니다.
+      const hexIndexes = cells
+        .map((c, i) => (isHexCell(c) ? i : -1))
+        .filter((i) => i >= 0);
+      if (hexIndexes.length) {
+        const hi = hexIndexes[hexIndexes.length - 1]; // 보통 마지막 칸이 색입니다
+        const rest = cells.filter((c, i) => i !== hi);
+        rows.push({ code: rest[0] || '', name: rest.slice(1).join(' ').trim(), hex: cells[hi] });
+        continue;
+      }
+
+      // 색을 R,G,B 세 칸으로 적은 색상표도 받아 줍니다.
+      const nums = cells
+        .map((c, i) => ({ i, v: Number(c) }))
+        .filter((o) => c0to255(o.v));
+      if (nums.length >= 3) {
+        const [r, g, b] = nums.slice(-3);
+        const used = new Set([r.i, g.i, b.i]);
+        const rest = cells.filter((c, i) => !used.has(i));
+        rows.push({
+          code: rest[0] || '',
+          name: rest.slice(1).join(' ').trim(),
+          hex: rgbToHex(r.v, g.v, b.v),
+        });
+      }
+      // 그 밖의 줄(머리글 등)은 조용히 건너뜁니다.
+    }
+  }
+
+  const colors = rows
+    .map((r) => {
+      const rgb = hexToRgb(r.hex);
+      if (!rgb) return null;
+      const code = String(r.code).trim();
+      if (!code) return null;
+      return { code, name: String(r.name || '').trim(), hex: rgbToHex(...rgb) };
+    })
+    .filter(Boolean);
+
+  if (!colors.length) throw new Error('색을 하나도 읽지 못했습니다. 번호와 색코드(#RRGGBB)가 들어 있는지 확인해 주세요.');
+  return { name: name || '내 색상표', colors };
+}
+
+/** '#1A2B3C' 또는 '1A2B3C' 처럼 진짜 색으로 보이는 칸인지 */
+function isHexCell(cell) {
+  return /^#[0-9a-fA-F]{3}$|^#[0-9a-fA-F]{6}$|^[0-9a-fA-F]{6}$/.test(String(cell).trim())
+    && hexToRgb(cell) !== null;
+}
+
+function c0to255(v) {
+  return Number.isFinite(v) && v >= 0 && v <= 255 && Number.isInteger(v);
+}
+
+function splitCsvLine(line) {
+  const out = [];
+  let cur = '';
+  let quoted = false;
+  for (let i = 0; i < line.length; i += 1) {
+    const ch = line[i];
+    if (quoted) {
+      if (ch === '"' && line[i + 1] === '"') { cur += '"'; i += 1; } else if (ch === '"') quoted = false;
+      else cur += ch;
+    } else if (ch === '"') quoted = true;
+    else if (ch === ',' || ch === '\t' || ch === ';') { out.push(cur.trim()); cur = ''; } else cur += ch;
+  }
+  out.push(cur.trim());
+  return out.filter((c) => c !== '');
+}
+
+/** 색 하나에 가장 가까운 실 번호를 가까운 순서로 돌려줍니다. */
+function match(rgb, palette, topN = 3) {
+  const lab = rgbToLab(rgb[0], rgb[1], rgb[2]);
+  const scored = palette.colors.map((c) => ({ color: c, de: deltaE2000(lab, c.lab) }));
+  scored.sort((a, b) => a.de - b.de);
+  return scored.slice(0, topN).map((s) => ({
+    code: s.color.code,
+    name: s.color.name,
+    ko: s.color.ko,
+    hex: s.color.hex,
+    de: s.de,
+  }));
+}
+
+/** 번호로 색 찾기 (예: '310', 'b5200') */
+function findByCode(palette, code) {
+  const key = String(code).trim().toLowerCase();
+  return palette.colors.find((c) => c.code.toLowerCase() === key) || null;
+}
+
+  return { loadBuiltin, loadCustomList, saveCustomList, loadPalette, parsePaletteText, match, findByCode };
+})();
+
+__m.ocr = (function () {
+
+/* ocr.js — 사진 속 실 번호(글자)를 읽어 위치를 알려 줍니다.
+   글자 인식 라이브러리는 처음 쓸 때만 인터넷에서 받아 옵니다(그 뒤로는 브라우저가 기억).
+   못 받아 오면 조용히 실패하고, 번호는 손으로 적어 넣으면 됩니다. */
+
+const SOURCES = [
+  {
+    lib: 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js',
+    worker: 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/worker.min.js',
+    core: 'https://cdn.jsdelivr.net/npm/tesseract.js-core@5.1.0',
+  },
+  {
+    lib: 'https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/5.1.1/tesseract.min.js',
+    worker: 'https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/5.1.1/worker.min.js',
+    core: 'https://cdn.jsdelivr.net/npm/tesseract.js-core@5.1.0',
+  },
+];
+const LANG = 'https://tessdata.projectnaptha.com/4.0.0';
+
+let workerPromise = null;
+
+function loadScript(src) {
+  return new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = src;
+    s.async = true;
+    s.onload = () => resolve();
+    s.onerror = () => reject(new Error(`불러오기 실패: ${src}`));
+    document.head.append(s);
+  });
+}
+
+function isReady() {
+  return !!workerPromise;
+}
+
+/** 글자 인식기를 준비합니다(처음 한 번만 시간이 걸립니다). */
+function ensureEngine(onProgress) {
+  if (workerPromise) return workerPromise;
+  workerPromise = (async () => {
+    let lastError = null;
+    for (const src of SOURCES) {
+      try {
+        if (!window.Tesseract) await loadScript(src.lib);
+        const worker = await window.Tesseract.createWorker('eng', 1, {
+          workerPath: src.worker,
+          corePath: src.core,
+          langPath: LANG,
+          logger: (m) => {
+            if (onProgress && typeof m.progress === 'number') onProgress(m.status, m.progress);
+          },
+        });
+        await worker.setParameters({
+          tessedit_char_whitelist: '0123456789Bblancwhite',
+          preserve_interword_spaces: '1',
+        });
+        return worker;
+      } catch (e) {
+        lastError = e;
+      }
+    }
+    workerPromise = null;
+    throw lastError || new Error('글자 인식기를 준비하지 못했습니다.');
+  })();
+  return workerPromise;
+}
+
+function collectWords(data) {
+  if (Array.isArray(data.words) && data.words.length) return data.words;
+  const out = [];
+  const walk = (nodes) => {
+    for (const n of nodes || []) {
+      if (n.words) out.push(...n.words);
+      walk(n.paragraphs || n.lines || n.blocks);
+    }
+  };
+  walk(data.blocks);
+  return out;
+}
+
+/**
+ * 사진에서 글자를 모두 읽어 위치와 함께 돌려줍니다.
+ * @returns {Promise<Array<{text:string, x:number, y:number, w:number, h:number, confidence:number}>>}
+ */
+async function readWords(canvas, onProgress) {
+  const worker = await ensureEngine(onProgress);
+  const { data } = await worker.recognize(canvas, {}, { blocks: true, text: true });
+  return collectWords(data)
+    .map((wd) => {
+      const b = wd.bbox || {};
+      return {
+        text: String(wd.text || '').trim(),
+        x: b.x0 ?? 0,
+        y: b.y0 ?? 0,
+        w: (b.x1 ?? 0) - (b.x0 ?? 0),
+        h: (b.y1 ?? 0) - (b.y0 ?? 0),
+        confidence: wd.confidence ?? 0,
+      };
+    })
+    .filter((wd) => wd.text && wd.w > 0 && wd.h > 0);
+}
+
+/** 찾는 번호/표시와 같은 글자만 골라냅니다. */
+function pickMatches(words, query) {
+  const key = normalize(query);
+  if (!key) return [];
+  const exact = words.filter((wd) => normalize(wd.text) === key);
+  if (exact.length) return exact;
+  return words.filter((wd) => normalize(wd.text).includes(key));
+}
+
+function normalize(text) {
+  return String(text).toLowerCase().replace(/[^0-9a-z]/g, '');
+}
+
+  return { isReady, ensureEngine, readWords, pickMatches, normalize };
+})();
+
+__m.ui = (function () {
+
+/* ui.js — 화면을 다루는 자잘한 도구들 */
+
+const $ = (sel, root = document) => root.querySelector(sel);
+const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
+
+function el(tag, attrs = {}, children = []) {
+  const node = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (v === null || v === undefined || v === false) continue;
+    if (k === 'class') node.className = v;
+    else if (k === 'text') node.textContent = v;
+    else if (k === 'html') node.innerHTML = v;
+    else if (k === 'style' && typeof v === 'object') Object.assign(node.style, v);
+    else if (k.startsWith('on') && typeof v === 'function') node.addEventListener(k.slice(2), v);
+    else node.setAttribute(k, v === true ? '' : v);
+  }
+  for (const c of [].concat(children)) {
+    if (c === null || c === undefined || c === false) continue;
+    node.append(c.nodeType ? c : document.createTextNode(String(c)));
+  }
+  return node;
+}
+
+let toastTimer = null;
+function toast(message, kind = '') {
+  let box = $('#toast');
+  if (!box) {
+    box = el('div', { id: 'toast', class: 'toast', role: 'status', 'aria-live': 'polite' });
+    document.body.append(box);
+  }
+  box.textContent = message;
+  box.className = `toast show ${kind}`;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { box.className = 'toast'; }, 2600);
+}
+
+/** 예/아니오 물어보기 */
+function confirmSheet(title, body, okLabel = '네') {
+  return new Promise((resolve) => {
+    const close = (v) => { wrap.remove(); resolve(v); };
+    const wrap = el('div', { class: 'sheet-wrap', onclick: (e) => { if (e.target === wrap) close(false); } }, [
+      el('div', { class: 'sheet' }, [
+        el('h2', { text: title }),
+        body ? el('p', { class: 'muted', text: body }) : null,
+        el('div', { class: 'sheet-actions' }, [
+          el('button', { class: 'btn', type: 'button', onclick: () => close(false), text: '취소' }),
+          el('button', { class: 'btn primary', type: 'button', onclick: () => close(true), text: okLabel }),
+        ]),
+      ]),
+    ]);
+    document.body.append(wrap);
+  });
+}
+
+/** 파일 하나 내려받기 (보통 브라우저) */
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = el('a', { href: url, download: filename });
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+}
+
+let downloadsCap;
+async function getDownloads() {
+  if (downloadsCap !== undefined) return downloadsCap;
+  downloadsCap = null;
+  try {
+    if (globalThis.claude && typeof globalThis.claude.use === 'function') {
+      downloadsCap = await globalThis.claude.use('downloads');
+    }
+  } catch (e) { /* 이 화면에서는 쓸 수 없습니다 */ }
+  return downloadsCap;
+}
+
+/**
+ * 파일을 사용자에게 건네줍니다.
+ * 한 장짜리 페이지로 열려 있을 때는 그 쪽 저장 창을 쓰고,
+ * 보통 브라우저에서는 그냥 내려받습니다.
+ * @returns {Promise<'saved'|'declined'|'failed'>}
+ */
+async function saveFile(blob, filename) {
+  const cap = await getDownloads();
+  if (cap) {
+    try {
+      await cap.save({ filename, data: blob });
+      return 'saved';
+    } catch (e) {
+      return e && e.code === 'declined' ? 'declined' : 'failed';
+    }
+  }
+  try {
+    downloadBlob(blob, filename);
+    return 'saved';
+  } catch (e) {
+    return 'failed';
+  }
+}
+
+/** 클립보드에 글자 넣기 (안 되면 false) */
+async function copyText(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch (e) {
+    try {
+      const ta = el('textarea', { style: { position: 'fixed', opacity: '0' } });
+      ta.value = text;
+      document.body.append(ta);
+      ta.select();
+      const ok = document.execCommand('copy');
+      ta.remove();
+      return ok;
+    } catch (e2) {
+      return false;
+    }
+  }
+}
+
+/**
+ * 'auto' 는 아무 표시도 남기지 않아, 기기 설정(또는 이 페이지를 띄운 쪽의 설정)을
+ * 그대로 따르게 합니다.
+ */
+function setTheme(theme) {
+  if (theme === 'auto') document.documentElement.removeAttribute('data-theme');
+  else document.documentElement.setAttribute('data-theme', theme);
+  try { localStorage.setItem('theme', theme); } catch (e) { /* 저장 막힘 */ }
+}
+
+function getTheme() {
+  try { return localStorage.getItem('theme') || 'auto'; } catch (e) { return 'auto'; }
+}
+
+  return { $, $$, el, toast, confirmSheet, saveFile, copyText, setTheme, getTheme };
+})();
+
+__m.db = (function () {
+
+/* db.js — 작업 중이던 사진과 상자를 기기 안에만 저장해 둡니다(IndexedDB).
+   서버로 보내는 통신은 없습니다. */
+
+const NAME = 'floss-cutter';
+const STORE = 'kv';
+let dbPromise = null;
+
+function open() {
+  if (dbPromise) return dbPromise;
+  dbPromise = new Promise((resolve, reject) => {
+    const req = indexedDB.open(NAME, 1);
+    req.onupgradeneeded = () => {
+      if (!req.result.objectStoreNames.contains(STORE)) req.result.createObjectStore(STORE);
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+  return dbPromise;
+}
+
+async function run(mode, fn) {
+  const db = await open();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE, mode);
+    const req = fn(tx.objectStore(STORE));
+    tx.oncomplete = () => resolve(req ? req.result : undefined);
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error);
+  });
+}
+
+async function get(key) {
+  try {
+    return await run('readonly', (s) => s.get(key));
+  } catch (e) {
+    return undefined;
+  }
+}
+
+async function set(key, value) {
+  try {
+    await run('readwrite', (s) => s.put(value, key));
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+async function del(key) {
+  try {
+    await run('readwrite', (s) => s.delete(key));
+  } catch (e) { /* 저장을 막아 둔 브라우저 */ }
+}
+
+  return { get, set, del };
+})();
+
+__m.app = (function () {
+  const { $, $$, el, toast, confirmSheet, saveFile, copyText, setTheme, getTheme } = __m.ui;
+  const db = __m.db;
+  const { detectRedRegions, ANALYSIS_MAX, overlapRatio } = __m.detect;
+  const { makeCanvas, context2d, cropCanvas, canvasToBlob, sortBoxes, SORT_LABELS, stitch } = __m.crop;
+  const { representativeColor, medianAround } = __m.sample;
+  const { loadPalette, loadCustomList, saveCustomList, parsePaletteText, match, findByCode } = __m.palette;
+  const { rgbToHex, readableInk, deltaEWord } = __m.color;
+  const ocr = __m.ocr;
+/* app.js — 실 자르기 · 색코드
+   사진에서 빨간선(또는 번호)로 표시한 실만 잘라 순서대로 정렬하고,
+   책자(색상표)를 고르면 가장 가까운 실 번호를 따로 알려 줍니다.
+   사진은 이 기기 밖으로 나가지 않습니다. */
+
+
+
+
+
+
+
+
+
+/* ------------------------------------------------------------------ 상태 */
+
+const DEFAULTS = {
+  sortMode: 'reading',
+  paletteId: 'dmc',
+  detect: {
+    strength: 1, join: 0.008, mode: 'auto', pad: 0, band: 0.1, side: 'auto', ignoreSolid: true,
+  },
+  find: { dir: 'auto', size: 6 },
+  out: {
+    layout: 'row', columns: 4, gap: 14, pad: 14, bg: '#ffffff', label: 'both',
+  },
+  sample: { skipRed: true, skipPaper: true, inset: 0.12 },
+};
+
+const state = {
+  photos: [],
+  current: 0,
+  palette: null,
+  tool: 'view',
+  selected: null,
+  tab: 'photo',
+  ...structuredClone(DEFAULTS),
+};
+
+// dirty: 화면이 숨어 있어서 크기를 알 수 없었던 상태. 탭을 열 때 다시 맞춥니다.
+const view = { scale: 1, ox: 0, oy: 0, dirty: true };
+let stage = null;
+let stageCtx = null;
+let drawQueued = false;
+let nextId = 1;
+
+const photo = () => state.photos[state.current] || null;
+const uid = () => `b${nextId++}`;
+
+/* -------------------------------------------------------------- 설정 저장 */
+
+const SETTINGS_KEY = 'floss.settings.v1';
+
+function saveSettings() {
+  try {
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify({
+      sortMode: state.sortMode,
+      paletteId: state.paletteId,
+      detect: state.detect,
+      find: state.find,
+      out: state.out,
+      sample: state.sample,
+    }));
+  } catch (e) { /* 저장을 막아 둔 브라우저 */ }
+}
+
+function loadSettings() {
+  try {
+    const raw = localStorage.getItem(SETTINGS_KEY);
+    if (!raw) return;
+    const s = JSON.parse(raw);
+    for (const key of ['sortMode', 'paletteId']) if (s[key]) state[key] = s[key];
+    for (const key of ['detect', 'find', 'out', 'sample']) {
+      if (s[key] && typeof s[key] === 'object') Object.assign(state[key], s[key]);
+    }
+  } catch (e) { /* 값이 깨졌으면 기본값 */ }
+}
+
+/* -------------------------------------------------------------- 사진 불러오기 */
+
+/** 사진을 그릴 수 있는 형태로 풉니다. 브라우저가 옵션을 모르면 차례로 물러섭니다. */
+async function decodeImage(blob) {
+  try {
+    return await createImageBitmap(blob, { imageOrientation: 'from-image' });
+  } catch (e) { /* 옵션을 모르는 브라우저 */ }
+  try {
+    return await createImageBitmap(blob);
+  } catch (e) { /* createImageBitmap 자체가 없는 경우 */ }
+  const url = URL.createObjectURL(blob);
+  try {
+    const img = new Image();
+    img.src = url;
+    await img.decode();
+    return img;
+  } finally {
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  }
+}
+
+async function addFiles(files) {
+  const list = Array.from(files).filter((f) => f.type.startsWith('image/'));
+  if (!list.length) {
+    toast('사진 파일이 아닙니다.', 'bad');
+    return;
+  }
+  for (const file of list) {
+    try {
+      const bitmap = await decodeImage(file);
+      state.photos.push({
+        id: `p${Date.now()}${Math.random().toString(36).slice(2, 6)}`,
+        name: file.name || '사진',
+        blob: file,
+        bitmap,
+        boxes: [],
+        words: null,
+      });
+    } catch (e) {
+      toast(`${file.name || '사진'} 을 열지 못했습니다.`, 'bad');
+    }
+  }
+  state.current = state.photos.length - 1;
+  fitView();
+  renderAll();
+  persist();
+  if (state.photos.length) goTab('cut');
+}
+
+function removePhoto(index) {
+  const p = state.photos[index];
+  if (!p) return;
+  if (p.bitmap && p.bitmap.close) p.bitmap.close();
+  state.photos.splice(index, 1);
+  state.current = Math.max(0, Math.min(state.current, state.photos.length - 1));
+  fitView();
+  renderAll();
+  persist();
+}
+
+/* ------------------------------------------------------------------ 화면 */
+
+function fitView() {
+  const p = photo();
+  if (!p || !stage) return;
+  const cw = stage.clientWidth || 0;
+  const ch = stage.clientHeight || 0;
+  if (cw < 8 || ch < 8) { view.dirty = true; return; } // 아직 화면에 나오지 않았습니다
+  const s = Math.min(cw / p.bitmap.width, ch / p.bitmap.height);
+  view.scale = s;
+  view.ox = (cw - p.bitmap.width * s) / 2;
+  view.oy = (ch - p.bitmap.height * s) / 2;
+  view.dirty = false;
+  requestDraw();
+}
+
+function toImage(px, py) {
+  return { x: (px - view.ox) / view.scale, y: (py - view.oy) / view.scale };
+}
+
+function toScreen(x, y) {
+  return { x: x * view.scale + view.ox, y: y * view.scale + view.oy };
+}
+
+function requestDraw() {
+  if (drawQueued) return;
+  drawQueued = true;
+  requestAnimationFrame(() => {
+    drawQueued = false;
+    drawStage();
+  });
+}
+
+function resizeStage() {
+  if (!stage) return;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+  const w = Math.max(1, Math.round(stage.clientWidth * dpr));
+  const h = Math.max(1, Math.round(stage.clientHeight * dpr));
+  if (stage.width !== w || stage.height !== h) {
+    stage.width = w;
+    stage.height = h;
+  }
+  stageCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  requestDraw();
+}
+
+function drawStage() {
+  if (!stage || !stageCtx) return;
+  const cw = stage.clientWidth;
+  const ch = stage.clientHeight;
+  stageCtx.clearRect(0, 0, cw, ch);
+  const p = photo();
+  $('#stage-empty').hidden = !!p;
+  if (!p) return;
+
+  stageCtx.imageSmoothingEnabled = true; // 화면에 보여 줄 때만. 저장은 원본 그대로입니다.
+  stageCtx.drawImage(
+    p.bitmap, view.ox, view.oy,
+    p.bitmap.width * view.scale, p.bitmap.height * view.scale,
+  );
+
+  const ordered = orderedBoxes(p);
+  ordered.forEach((b, i) => {
+    const a = toScreen(b.x, b.y);
+    const w = b.w * view.scale;
+    const h = b.h * view.scale;
+    const on = state.selected === b.id;
+
+    stageCtx.lineWidth = on ? 3 : 2;
+    stageCtx.strokeStyle = on ? '#ffd54a' : '#3ddc84';
+    stageCtx.setLineDash(on ? [] : [7, 5]);
+    stageCtx.strokeRect(a.x + 0.5, a.y + 0.5, w, h);
+    stageCtx.setLineDash([]);
+
+    // 순서 번호
+    const badge = String(i + 1);
+    stageCtx.font = '700 13px system-ui, sans-serif';
+    const tw = stageCtx.measureText(badge).width + 12;
+    stageCtx.fillStyle = on ? '#ffd54a' : '#3ddc84';
+    stageCtx.fillRect(a.x, a.y - 20, tw, 20);
+    stageCtx.fillStyle = '#08130d';
+    stageCtx.textBaseline = 'middle';
+    stageCtx.textAlign = 'center';
+    stageCtx.fillText(badge, a.x + tw / 2, a.y - 10);
+
+    if (b.label) {
+      stageCtx.font = '600 12px system-ui, sans-serif';
+      const lw = stageCtx.measureText(b.label).width + 10;
+      stageCtx.fillStyle = 'rgba(0,0,0,.66)';
+      stageCtx.fillRect(a.x + tw + 3, a.y - 20, lw, 20);
+      stageCtx.fillStyle = '#fff';
+      stageCtx.fillText(b.label, a.x + tw + 3 + lw / 2, a.y - 10);
+    }
+
+    if (on) {
+      stageCtx.fillStyle = '#ffd54a';
+      for (const [hx, hy] of corners(a.x, a.y, w, h)) {
+        stageCtx.fillRect(hx - 7, hy - 7, 14, 14);
+      }
+    }
+  });
+}
+
+function corners(x, y, w, h) {
+  return [[x, y], [x + w, y], [x, y + h], [x + w, y + h]];
+}
+
+/* --------------------------------------------------------- 손가락/마우스 조작 */
+
+const pointers = new Map();
+let drag = null;
+let pinch = null;
+
+function boxAt(ix, iy) {
+  const p = photo();
+  if (!p) return null;
+  const list = orderedBoxes(p).slice().reverse();
+  return list.find((b) => ix >= b.x && ix <= b.x + b.w && iy >= b.y && iy <= b.y + b.h) || null;
+}
+
+function handleAt(px, py) {
+  const p = photo();
+  if (!p || !state.selected) return null;
+  const b = p.boxes.find((v) => v.id === state.selected);
+  if (!b) return null;
+  const a = toScreen(b.x, b.y);
+  const w = b.w * view.scale;
+  const h = b.h * view.scale;
+  const names = ['nw', 'ne', 'sw', 'se'];
+  const pts = corners(a.x, a.y, w, h);
+  for (let i = 0; i < pts.length; i += 1) {
+    if (Math.hypot(px - pts[i][0], py - pts[i][1]) <= 18) return { box: b, corner: names[i] };
+  }
+  return null;
+}
+
+function bindStage() {
+  stage.addEventListener('pointerdown', (e) => {
+    stage.setPointerCapture(e.pointerId);
+    pointers.set(e.pointerId, { x: e.offsetX, y: e.offsetY });
+    if (pointers.size === 2) {
+      const [a, b] = Array.from(pointers.values());
+      pinch = {
+        dist: Math.hypot(a.x - b.x, a.y - b.y),
+        cx: (a.x + b.x) / 2,
+        cy: (a.y + b.y) / 2,
+        scale: view.scale,
+        ox: view.ox,
+        oy: view.oy,
+      };
+      drag = null;
+      return;
+    }
+    if (pointers.size > 2) return;
+
+    const hit = handleAt(e.offsetX, e.offsetY);
+    const img = toImage(e.offsetX, e.offsetY);
+    if (hit) {
+      drag = { kind: 'resize', box: hit.box, corner: hit.corner, start: img, orig: { ...hit.box } };
+      return;
+    }
+    const b = boxAt(img.x, img.y);
+    if (b) {
+      state.selected = b.id;
+      drag = { kind: 'move', box: b, start: img, orig: { ...b } };
+      renderPieces();
+      requestDraw();
+      return;
+    }
+    if (state.tool === 'draw' && photo()) {
+      const nb = {
+        id: uid(), x: Math.round(img.x), y: Math.round(img.y), w: 1, h: 1, kind: 'manual', label: '',
+      };
+      photo().boxes.push(nb);
+      state.selected = nb.id;
+      drag = { kind: 'create', box: nb, start: img };
+      requestDraw();
+      return;
+    }
+    state.selected = null;
+    drag = { kind: 'pan', sx: e.offsetX, sy: e.offsetY, ox: view.ox, oy: view.oy };
+    renderPieces();
+    requestDraw();
+  });
+
+  stage.addEventListener('pointermove', (e) => {
+    if (!pointers.has(e.pointerId)) return;
+    pointers.set(e.pointerId, { x: e.offsetX, y: e.offsetY });
+
+    if (pinch && pointers.size >= 2) {
+      const [a, b] = Array.from(pointers.values());
+      const dist = Math.hypot(a.x - b.x, a.y - b.y) || 1;
+      const factor = dist / (pinch.dist || 1);
+      const scale = Math.max(0.05, Math.min(24, pinch.scale * factor));
+      const cx = (a.x + b.x) / 2;
+      const cy = (a.y + b.y) / 2;
+      view.ox = cx - ((pinch.cx - pinch.ox) / pinch.scale) * scale;
+      view.oy = cy - ((pinch.cy - pinch.oy) / pinch.scale) * scale;
+      view.scale = scale;
+      requestDraw();
+      return;
+    }
+    if (!drag) return;
+    const img = toImage(e.offsetX, e.offsetY);
+
+    if (drag.kind === 'pan') {
+      view.ox = drag.ox + (e.offsetX - drag.sx);
+      view.oy = drag.oy + (e.offsetY - drag.sy);
+      requestDraw();
+      return;
+    }
+    if (drag.kind === 'create') {
+      const b = drag.box;
+      b.x = Math.round(Math.min(drag.start.x, img.x));
+      b.y = Math.round(Math.min(drag.start.y, img.y));
+      b.w = Math.max(1, Math.round(Math.abs(img.x - drag.start.x)));
+      b.h = Math.max(1, Math.round(Math.abs(img.y - drag.start.y)));
+      clampBox(b);
+      requestDraw();
+      return;
+    }
+    if (drag.kind === 'move') {
+      const b = drag.box;
+      b.x = Math.round(drag.orig.x + (img.x - drag.start.x));
+      b.y = Math.round(drag.orig.y + (img.y - drag.start.y));
+      clampBox(b);
+      requestDraw();
+      return;
+    }
+    if (drag.kind === 'resize') {
+      const b = drag.box;
+      const o = drag.orig;
+      let x0 = o.x;
+      let y0 = o.y;
+      let x1 = o.x + o.w;
+      let y1 = o.y + o.h;
+      if (drag.corner.includes('n')) y0 = img.y;
+      if (drag.corner.includes('s')) y1 = img.y;
+      if (drag.corner.includes('w')) x0 = img.x;
+      if (drag.corner.includes('e')) x1 = img.x;
+      b.x = Math.round(Math.min(x0, x1));
+      b.y = Math.round(Math.min(y0, y1));
+      b.w = Math.max(2, Math.round(Math.abs(x1 - x0)));
+      b.h = Math.max(2, Math.round(Math.abs(y1 - y0)));
+      clampBox(b);
+      requestDraw();
+    }
+  });
+
+  const finish = (e) => {
+    pointers.delete(e.pointerId);
+    if (pointers.size < 2) pinch = null;
+    if (!drag) return;
+    if (drag.kind === 'create' && (drag.box.w < 6 || drag.box.h < 6)) {
+      const p = photo();
+      p.boxes = p.boxes.filter((b) => b.id !== drag.box.id);
+      state.selected = null;
+    } else if (drag.kind !== 'pan') {
+      invalidate(drag.box);
+      resort();
+    }
+    drag = null;
+    renderPieces();
+    requestDraw();
+    persist();
+  };
+  stage.addEventListener('pointerup', finish);
+  stage.addEventListener('pointercancel', finish);
+
+  stage.addEventListener('wheel', (e) => {
+    if (!photo()) return;
+    e.preventDefault();
+    const factor = Math.exp(-e.deltaY * 0.0016);
+    const scale = Math.max(0.05, Math.min(24, view.scale * factor));
+    view.ox = e.offsetX - ((e.offsetX - view.ox) / view.scale) * scale;
+    view.oy = e.offsetY - ((e.offsetY - view.oy) / view.scale) * scale;
+    view.scale = scale;
+    requestDraw();
+  }, { passive: false });
+}
+
+function clampBox(b) {
+  const p = photo();
+  if (!p) return;
+  b.w = Math.min(b.w, p.bitmap.width);
+  b.h = Math.min(b.h, p.bitmap.height);
+  b.x = Math.max(0, Math.min(b.x, p.bitmap.width - b.w));
+  b.y = Math.max(0, Math.min(b.y, p.bitmap.height - b.h));
+}
+
+/** 상자를 고치면 뽑아 둔 색·추천 번호는 무효가 됩니다. */
+function invalidate(box) {
+  if (!box) return;
+  delete box.rgb;
+  delete box.matches;
+  delete box.picked;
+}
+
+/* ------------------------------------------------------------ 빨간선 찾기 */
+
+function analysisImageData(p) {
+  const scale = Math.min(1, ANALYSIS_MAX / Math.max(p.bitmap.width, p.bitmap.height));
+  const w = Math.max(1, Math.round(p.bitmap.width * scale));
+  const h = Math.max(1, Math.round(p.bitmap.height * scale));
+  const c = makeCanvas(w, h);
+  const ctx = c.getContext('2d', { colorSpace: 'srgb', willReadFrequently: true });
+  ctx.imageSmoothingEnabled = true;
+  ctx.drawImage(p.bitmap, 0, 0, w, h);
+  return { data: ctx.getImageData(0, 0, w, h), scale };
+}
+
+function detect() {
+  const p = photo();
+  if (!p) {
+    toast('사진을 먼저 불러오세요.', 'bad');
+    return;
+  }
+  const { data, scale } = analysisImageData(p);
+  const found = detectRedRegions(data, scale, state.detect);
+  if (!found.length) {
+    toast('빨간선을 찾지 못했습니다. 민감도를 낮춰 보세요.', 'bad');
+    return;
+  }
+  // 이미 있는 상자와 크게 겹치면 새로 만들지 않습니다.
+  let added = 0;
+  for (const f of found) {
+    if (p.boxes.some((b) => overlapRatio(b, f) > 0.6)) continue;
+    p.boxes.push({ ...f, id: uid(), label: '' });
+    added += 1;
+  }
+  resort();
+  renderAll();
+  persist();
+  toast(added ? `${added}군데 찾았습니다.` : '새로 찾은 곳이 없습니다.');
+}
+
+/* ------------------------------------------------------- 번호·표시로 찾기 */
+
+async function findByNumber() {
+  const p = photo();
+  const query = $('#q-code').value.trim();
+  if (!p) { toast('사진을 먼저 불러오세요.', 'bad'); return; }
+  if (!query) { toast('찾을 번호나 표시를 적어 주세요.', 'bad'); return; }
+
+  const help = $('#find-help');
+  help.textContent = '사진 속 글자를 읽는 중입니다… (처음 한 번은 시간이 걸립니다)';
+
+  let words = p.words;
+  if (!words) {
+    try {
+      const scale = Math.min(1, 2000 / Math.max(p.bitmap.width, p.bitmap.height));
+      const c = makeCanvas(p.bitmap.width * scale, p.bitmap.height * scale);
+      context2d(c).drawImage(p.bitmap, 0, 0, c.width, c.height);
+      const raw = await ocr.readWords(c, (status, prog) => {
+        help.textContent = `글자 읽는 중… ${status} ${Math.round(prog * 100)}%`;
+      });
+      words = raw.map((wd) => ({
+        ...wd, x: wd.x / scale, y: wd.y / scale, w: wd.w / scale, h: wd.h / scale,
+      }));
+      p.words = words;
+    } catch (e) {
+      words = null;
+    }
+  }
+
+  const hits = words ? ocr.pickMatches(words, query) : [];
+  if (hits.length) {
+    let added = 0;
+    for (const wd of hits) {
+      const box = boxForWord(p, wd, query);
+      if (!box) continue;
+      if (p.boxes.some((b) => overlapRatio(b, box) > 0.6)) {
+        const same = p.boxes.find((b) => overlapRatio(b, box) > 0.6);
+        if (same && !same.label) same.label = query;
+        continue;
+      }
+      p.boxes.push(box);
+      added += 1;
+    }
+    resort();
+    renderAll();
+    persist();
+    help.textContent = added
+      ? `'${query}' 을(를) ${added}군데 찾아 잘랐습니다.`
+      : `'${query}' 은(는) 이미 잡혀 있는 자리입니다.`;
+    return;
+  }
+
+  // 글자를 못 읽었을 때: 책자에 있는 번호라면 색으로 찾아봅니다.
+  const byColor = await findByPaletteColor(p, query);
+  if (byColor) {
+    help.textContent = byColor;
+    return;
+  }
+  help.textContent = words
+    ? `'${query}' 이라는 글자를 사진에서 찾지 못했습니다. 직접 그리기로 잡아 주세요.`
+    : '글자 인식기를 준비하지 못했습니다(인터넷 연결이 필요합니다). 번호는 조각 목록에서 손으로 적어 넣을 수 있습니다.';
+}
+
+/** 숫자 위치를 기준으로 실이 있을 자리를 잡습니다. */
+function boxForWord(p, wd, label) {
+  const unit = Math.max(10, wd.h);
+  const reach = unit * state.find.size;
+  const marked = p.boxes.find((b) => b.kind !== 'manual'
+    && wd.x + wd.w / 2 >= b.x - unit && wd.x + wd.w / 2 <= b.x + b.w + unit
+    && wd.y + wd.h / 2 >= b.y - unit && wd.y + wd.h / 2 <= b.y + b.h + unit);
+  if (marked) {
+    if (!marked.label) marked.label = label;
+    return null; // 이미 빨간선으로 잡아 둔 자리입니다.
+  }
+
+  const dir = state.find.dir === 'auto' ? guessDirection(p, wd, reach) : state.find.dir;
+  const cx = wd.x + wd.w / 2;
+  const cy = wd.y + wd.h / 2;
+  let box;
+  if (dir === 'up') box = { x: cx - reach / 2, y: wd.y - reach, w: reach, h: reach - unit * 0.4 };
+  else if (dir === 'down') box = { x: cx - reach / 2, y: wd.y + wd.h + unit * 0.4, w: reach, h: reach };
+  else if (dir === 'left') box = { x: wd.x - reach, y: cy - reach / 2, w: reach - unit * 0.4, h: reach };
+  else if (dir === 'right') box = { x: wd.x + wd.w + unit * 0.4, y: cy - reach / 2, w: reach, h: reach };
+  else box = { x: cx - reach / 2, y: cy - reach / 2, w: reach, h: reach };
+
+  const out = {
+    id: uid(),
+    x: Math.round(Math.max(0, box.x)),
+    y: Math.round(Math.max(0, box.y)),
+    w: Math.round(box.w),
+    h: Math.round(box.h),
+    kind: 'number',
+    label,
+  };
+  clampBox(out);
+  return out;
+}
+
+/** 숫자 둘레에서 색이 가장 짙은 쪽을 실이 있는 방향으로 봅니다. */
+function guessDirection(p, wd, reach) {
+  const probe = (x, y, w, h) => {
+    const rect = {
+      x: Math.max(0, Math.round(x)),
+      y: Math.max(0, Math.round(y)),
+      w: Math.max(4, Math.round(w)),
+      h: Math.max(4, Math.round(h)),
+    };
+    if (rect.x >= p.bitmap.width || rect.y >= p.bitmap.height) return -1;
+    rect.w = Math.min(rect.w, p.bitmap.width - rect.x);
+    rect.h = Math.min(rect.h, p.bitmap.height - rect.y);
+    const img = readRegion(p, rect, 60);
+    if (!img) return -1;
+    let sum = 0;
+    let n = 0;
+    for (let i = 0; i < img.data.length; i += 4) {
+      const r = img.data[i];
+      const g = img.data[i + 1];
+      const b = img.data[i + 2];
+      sum += Math.max(r, g, b) - Math.min(r, g, b);
+      n += 1;
+    }
+    return n ? sum / n : -1;
+  };
+  const cx = wd.x + wd.w / 2;
+  const cy = wd.y + wd.h / 2;
+  const scores = {
+    up: probe(cx - reach / 2, wd.y - reach, reach, reach * 0.9),
+    down: probe(cx - reach / 2, wd.y + wd.h, reach, reach * 0.9),
+    left: probe(wd.x - reach, cy - reach / 2, reach * 0.9, reach),
+    right: probe(wd.x + wd.w, cy - reach / 2, reach * 0.9, reach),
+  };
+  return Object.entries(scores).sort((a, b) => b[1] - a[1])[0][0];
+}
+
+/** 번호가 책자에 있으면, 그 색과 가장 비슷한 조각을 알려 줍니다. */
+async function findByPaletteColor(p, query) {
+  const palette = await ensurePalette();
+  const target = palette && findByCode(palette, query);
+  if (!target) return null;
+  await analyzeColors({ quiet: true });
+  const pieces = allPieces().filter((pc) => pc.box.rgb);
+  if (!pieces.length) return null;
+  let best = null;
+  for (const pc of pieces) {
+    const de = match(pc.box.rgb, { colors: [target] }, 1)[0].de;
+    if (!best || de < best.de) best = { pc, de };
+  }
+  if (!best) return null;
+  state.current = state.photos.indexOf(best.pc.photo);
+  state.selected = best.pc.box.id;
+  if (!best.pc.box.label) best.pc.box.label = query;
+  renderAll();
+  requestDraw();
+  return `글자는 못 읽었지만, ${palette.name}의 ${query}번 색과 가장 비슷한 조각(${best.pc.index + 1}번, 차이 ΔE ${best.de.toFixed(1)})을 골라 두었습니다.`;
+}
+
+/* ---------------------------------------------------------------- 조각 목록 */
+
+function orderedBoxes(p) {
+  return p.boxes;
+}
+
+function resort() {
+  for (const p of state.photos) p.boxes = sortBoxes(p.boxes, state.sortMode);
+}
+
+function allPieces() {
+  const out = [];
+  for (const p of state.photos) {
+    for (const b of orderedBoxes(p)) out.push({ photo: p, box: b, index: out.length });
+  }
+  return out;
+}
+
+/** 원본에서 상자 영역의 픽셀을 읽습니다(최대 변 maxSide 로 줄여서). */
+function readRegion(p, box, maxSide = 240) {
+  const w = Math.max(1, Math.min(Math.round(box.w), p.bitmap.width - Math.round(box.x)));
+  const h = Math.max(1, Math.min(Math.round(box.h), p.bitmap.height - Math.round(box.y)));
+  if (w < 1 || h < 1) return null;
+  const s = Math.min(1, maxSide / Math.max(w, h));
+  const cw = Math.max(1, Math.round(w * s));
+  const ch = Math.max(1, Math.round(h * s));
+  const c = makeCanvas(cw, ch);
+  const ctx = c.getContext('2d', { colorSpace: 'srgb', willReadFrequently: true });
+  ctx.imageSmoothingEnabled = true;
+  ctx.drawImage(p.bitmap, Math.round(box.x), Math.round(box.y), w, h, 0, 0, cw, ch);
+  return ctx.getImageData(0, 0, cw, ch);
+}
+
+async function ensurePalette() {
+  if (state.palette && state.palette.id === state.paletteId) return state.palette;
+  try {
+    const p = await loadPalette(state.paletteId);
+    state.palette = { ...p, id: state.paletteId };
+    return state.palette;
+  } catch (e) {
+    toast('색상표를 불러오지 못했습니다.', 'bad');
+    return null;
+  }
+}
+
+async function analyzeColors(opt = {}) {
+  const palette = await ensurePalette();
+  const pieces = allPieces();
+  if (!pieces.length) {
+    if (!opt.quiet) toast('먼저 자를 곳을 잡아 주세요.', 'bad');
+    return;
+  }
+  for (const pc of pieces) {
+    if (pc.box.rgb && pc.box.matches && pc.box.paletteId === state.paletteId) continue;
+    if (!pc.box.rgb) {
+      const img = readRegion(pc.photo, pc.box, 200);
+      const rep = img ? representativeColor(img, state.sample) : null;
+      if (!rep) continue;
+      pc.box.rgb = rep.rgb;
+      pc.box.coverage = rep.coverage;
+    }
+    if (palette) {
+      pc.box.matches = match(pc.box.rgb, palette, 3);
+      pc.box.paletteId = state.paletteId;
+    }
+  }
+  renderPieces();
+  renderExport();
+  persist();
+  if (!opt.quiet) toast('색코드를 뽑았습니다.');
+}
+
+function renderPieces() {
+  const wrap = $('#piece-list');
+  const pieces = allPieces();
+  $('#piece-count').textContent = pieces.length ? `${pieces.length}조각` : '아직 없음';
+  wrap.textContent = '';
+  if (!pieces.length) {
+    wrap.append(el('div', { class: 'empty' }, [
+      el('span', { class: 'big', text: '✂️' }),
+      el('p', { text: '자르기 화면에서 빨간선을 찾거나, 직접 그려 주세요.' }),
+    ]));
+    return;
+  }
+
+  pieces.forEach((pc, i) => {
+    const { box } = pc;
+    const thumb = makeCanvas(1, 1);
+    const src = cropCanvas(pc.photo.bitmap, box);
+    const s = Math.min(1, 132 / Math.max(src.width, src.height));
+    thumb.width = Math.max(1, Math.round(src.width * s));
+    thumb.height = Math.max(1, Math.round(src.height * s));
+    const tctx = thumb.getContext('2d');
+    tctx.imageSmoothingEnabled = true;
+    tctx.drawImage(src, 0, 0, thumb.width, thumb.height);
+    thumb.className = 'thumb';
+
+    const hex = box.rgb ? rgbToHex(...box.rgb) : null;
+    const chips = (box.matches || []).map((m, mi) => el('button', {
+      class: `chip${mi === 0 ? ' best' : ''}`,
+      type: 'button',
+      title: `${m.name} · 차이 ΔE ${m.de.toFixed(1)} (${deltaEWord(m.de)})`,
+      onclick: () => {
+        box.label = m.code;
+        renderPieces();
+        requestDraw();
+        persist();
+      },
+    }, [
+      el('span', { class: 'chip-dot', style: { background: m.hex } }),
+      el('b', { text: m.code }),
+      el('small', { text: `ΔE ${m.de.toFixed(1)}` }),
+    ]));
+
+    const card = el('div', { class: `piece${state.selected === box.id ? ' on' : ''}` }, [
+      el('div', {
+        class: 'piece-thumb',
+        onclick: () => {
+          state.current = state.photos.indexOf(pc.photo);
+          state.selected = box.id;
+          goTab('cut');
+          fitView();
+          renderPieces();
+        },
+      }, [thumb, el('span', { class: 'piece-no', text: String(i + 1) })]),
+      el('div', { class: 'piece-body' }, [
+        el('div', { class: 'row tight' }, [
+          el('input', {
+            class: 'label-input',
+            value: box.label || '',
+            placeholder: '번호·이름 (예: 310)',
+            oninput: (e) => { box.label = e.target.value; requestDraw(); },
+            onchange: () => persist(),
+          }),
+        ]),
+        hex ? el('div', { class: 'row tight swatch-row' }, [
+          el('span', { class: 'swatch', style: { background: hex, color: readableInk(...box.rgb) }, text: hex }),
+          el('button', {
+            class: 'mini', type: 'button', text: '스포이드',
+            title: '실 한가운데를 눌러 그 자리 색을 그대로 씁니다',
+            onclick: () => startEyedrop(pc),
+          }),
+        ]) : el('p', { class: 'muted small', text: '“색코드 뽑기”를 누르면 색을 읽습니다.' }),
+        chips.length ? el('div', { class: 'chips' }, chips) : null,
+        el('div', { class: 'row tight actions' }, [
+          el('button', { class: 'mini', type: 'button', text: '↑', title: '앞으로', onclick: () => movePiece(pc, -1) }),
+          el('button', { class: 'mini', type: 'button', text: '↓', title: '뒤로', onclick: () => movePiece(pc, 1) }),
+          el('button', { class: 'mini', type: 'button', text: '저장', onclick: () => savePiece(pc, i) }),
+          el('button', { class: 'mini danger', type: 'button', text: '삭제', onclick: () => removePiece(pc) }),
+        ]),
+      ]),
+    ]);
+    wrap.append(card);
+  });
+}
+
+function movePiece(pc, delta) {
+  const list = pc.photo.boxes;
+  const i = list.indexOf(pc.box);
+  const j = i + delta;
+  if (i < 0 || j < 0 || j >= list.length) return;
+  list.splice(j, 0, list.splice(i, 1)[0]);
+  state.sortMode = 'manual';
+  $('#sort-mode').value = 'manual';
+  saveSettings();
+  renderPieces();
+  requestDraw();
+  persist();
+}
+
+function removePiece(pc) {
+  pc.photo.boxes = pc.photo.boxes.filter((b) => b.id !== pc.box.id);
+  if (state.selected === pc.box.id) state.selected = null;
+  renderAll();
+  persist();
+}
+
+let eyedrop = null;
+function startEyedrop(pc) {
+  eyedrop = pc;
+  state.current = state.photos.indexOf(pc.photo);
+  state.selected = pc.box.id;
+  goTab('cut');
+  fitView();
+  toast('실 한가운데를 눌러 주세요.');
+  const once = (e) => {
+    stage.removeEventListener('click', once);
+    if (!eyedrop) return;
+    const img = toImage(e.offsetX, e.offsetY);
+    const region = readRegion(pc.photo, {
+      x: img.x - 4, y: img.y - 4, w: 9, h: 9,
+    }, 9);
+    if (region) {
+      pc.box.rgb = medianAround(region, region.width / 2, region.height / 2, 1);
+      delete pc.box.matches;
+      analyzeColors({ quiet: true });
+      toast(`색을 ${rgbToHex(...pc.box.rgb)} 로 잡았습니다.`);
+    }
+    eyedrop = null;
+  };
+  stage.addEventListener('click', once);
+}
+
+/* ------------------------------------------------------------------ 내보내기 */
+
+function safeName(text) {
+  return String(text || '').replace(/[\\/:*?"<>|]+/g, '_').slice(0, 40);
+}
+
+async function savePiece(pc, index) {
+  const canvas = cropCanvas(pc.photo.bitmap, pc.box);
+  const blob = await canvasToBlob(canvas);
+  const n = String(index + 1).padStart(2, '0');
+  return saveFile(blob, `${n}${pc.box.label ? `_${safeName(pc.box.label)}` : ''}.png`);
+}
+
+async function saveAllPieces() {
+  const pieces = allPieces();
+  if (!pieces.length) { toast('저장할 조각이 없습니다.', 'bad'); return; }
+  toast(`${pieces.length}장을 한 장씩 저장합니다…`);
+  let saved = 0;
+  for (let i = 0; i < pieces.length; i += 1) {
+    // eslint-disable-next-line no-await-in-loop
+    const result = await savePiece(pieces[i], i);
+    if (result === 'declined') { toast('저장을 멈췄습니다.'); return; }
+    if (result === 'saved') saved += 1;
+    // eslint-disable-next-line no-await-in-loop
+    await new Promise((r) => setTimeout(r, 260));
+  }
+  toast(`${saved}장을 저장했습니다.`);
+}
+
+function buildSheet() {
+  const pieces = allPieces();
+  if (!pieces.length) return null;
+  const items = pieces.map((pc, i) => {
+    const canvas = cropCanvas(pc.photo.bitmap, pc.box);
+    const code = pc.box.matches && pc.box.matches[0] ? pc.box.matches[0].code : '';
+    let label = '';
+    let sub = '';
+    if (state.out.label === 'order') label = `${i + 1}`;
+    else if (state.out.label === 'name') label = pc.box.label || `${i + 1}`;
+    else if (state.out.label === 'code') label = code || pc.box.label || `${i + 1}`;
+    else if (state.out.label === 'both') {
+      label = pc.box.label || `${i + 1}`;
+      sub = code && code !== pc.box.label ? `≈ ${code}` : '';
+    }
+    return { canvas, label, sub };
+  });
+  const dark = ['#000000', '#111111', 'transparent'].includes(state.out.bg);
+  return stitch(items, {
+    layout: state.out.layout,
+    columns: Number(state.out.columns) || 4,
+    gap: Number(state.out.gap) || 0,
+    pad: Number(state.out.gap) || 0,
+    bg: state.out.bg,
+    label: state.out.label !== 'none',
+    labelH: state.out.label === 'both' ? 44 : 30,
+    ink: dark ? '#f2f4f8' : '#14181f',
+  });
+}
+
+let previewUrl = null;
+
+async function renderExport() {
+  const holder = $('#sheet-preview');
+  holder.textContent = '';
+  const pieces = allPieces();
+  $('#out-count').textContent = pieces.length ? `${pieces.length}조각` : '조각 없음';
+  if (!pieces.length) {
+    holder.append(el('p', { class: 'muted', text: '자른 조각이 없습니다.' }));
+    return;
+  }
+  const sheet = buildSheet();
+  if (!sheet) return;
+  const note = el('p', {
+    class: 'muted small',
+    text: `이어붙인 크기 ${sheet.width} × ${sheet.height} 픽셀 · 그림을 길게 눌러도 저장됩니다.`,
+  });
+  // 캔버스 대신 그림으로 보여 주면 길게 눌러 저장할 수 있습니다. 픽셀은 그대로입니다.
+  const blob = await canvasToBlob(sheet);
+  if (previewUrl) URL.revokeObjectURL(previewUrl);
+  previewUrl = URL.createObjectURL(blob);
+  holder.textContent = '';
+  holder.append(el('img', {
+    class: 'sheet-canvas',
+    src: previewUrl,
+    alt: '이어붙인 실 조각 미리보기',
+    width: sheet.width,
+    height: sheet.height,
+  }), note);
+}
+
+async function saveSheet() {
+  const sheet = buildSheet();
+  if (!sheet) { toast('조각이 없습니다.', 'bad'); return; }
+  const blob = await canvasToBlob(sheet);
+  const result = await saveFile(blob, `실_정렬_${new Date().toISOString().slice(0, 10)}.png`);
+  if (result === 'failed') toast('저장하지 못했습니다. 미리보기를 길게 눌러 저장해 보세요.', 'bad');
+}
+
+function codeTable() {
+  const pieces = allPieces();
+  const name = state.palette ? state.palette.name : '';
+  const head = ['순서', '내가 적은 번호', '사진에서 읽은 색', `${name} 1순위`, '이름', 'ΔE', '2순위', '3순위'];
+  const rows = pieces.map((pc, i) => {
+    const m = pc.box.matches || [];
+    return [
+      i + 1,
+      pc.box.label || '',
+      pc.box.rgb ? rgbToHex(...pc.box.rgb) : '',
+      m[0] ? m[0].code : '',
+      m[0] ? m[0].name : '',
+      m[0] ? m[0].de.toFixed(2) : '',
+      m[1] ? `${m[1].code} (ΔE ${m[1].de.toFixed(1)})` : '',
+      m[2] ? `${m[2].code} (ΔE ${m[2].de.toFixed(1)})` : '',
+    ];
+  });
+  return { head, rows };
+}
+
+function tableToCsv() {
+  const { head, rows } = codeTable();
+  const q = (v) => `"${String(v).replace(/"/g, '""')}"`;
+  return [head, ...rows].map((r) => r.map(q).join(',')).join('\r\n');
+}
+
+function tableToText() {
+  const { rows } = codeTable();
+  return rows
+    .map((r) => `${r[0]}. ${r[1] || '-'}  ${r[2]}  →  ${r[3] || '?'} ${r[4] || ''}`.trim())
+    .join('\n');
+}
+
+/* ------------------------------------------------------------- 책자(색상표) */
+
+function renderPaletteSelect() {
+  const sel = $('#palette-sel');
+  sel.textContent = '';
+  sel.append(el('option', { value: 'dmc', text: 'DMC (25번 자수실) · 454색' }));
+  for (const p of loadCustomList()) {
+    sel.append(el('option', { value: p.id, text: `${p.name} · ${p.colors.length}색` }));
+  }
+  sel.value = state.paletteId;
+  if (sel.value !== state.paletteId) {
+    state.paletteId = 'dmc';
+    sel.value = 'dmc';
+  }
+}
+
+async function addPalette(file) {
+  try {
+    const text = await file.text();
+    const parsed = parsePaletteText(text, file.name.replace(/\.[^.]+$/, ''));
+    const list = loadCustomList();
+    const id = `c${Date.now().toString(36)}`;
+    list.push({ id, name: parsed.name, colors: parsed.colors });
+    saveCustomList(list);
+    state.paletteId = id;
+    state.palette = null;
+    renderPaletteSelect();
+    saveSettings();
+    for (const p of state.photos) for (const b of p.boxes) delete b.matches;
+    await analyzeColors({ quiet: true });
+    toast(`${parsed.name} 색상표 ${parsed.colors.length}색을 넣었습니다.`);
+  } catch (e) {
+    toast(e.message || '색상표를 읽지 못했습니다.', 'bad');
+  }
+}
+
+/* ------------------------------------------------------------------ 저장·복원 */
+
+let persistTimer = null;
+function persist() {
+  clearTimeout(persistTimer);
+  persistTimer = setTimeout(async () => {
+    if (!$('#opt-remember').checked) {
+      await db.del('session');
+      return;
+    }
+    await db.set('session', {
+      photos: state.photos.map((p) => ({
+        id: p.id, name: p.name, blob: p.blob, boxes: p.boxes,
+      })),
+      current: state.current,
+    });
+  }, 500);
+}
+
+async function restore() {
+  const saved = await db.get('session');
+  if (!saved || !Array.isArray(saved.photos) || !saved.photos.length) return;
+  for (const sp of saved.photos) {
+    try {
+      const bitmap = await decodeImage(sp.blob);
+      state.photos.push({
+        id: sp.id, name: sp.name, blob: sp.blob, bitmap, boxes: sp.boxes || [], words: null,
+      });
+    } catch (e) { /* 못 여는 사진은 건너뜁니다 */ }
+  }
+  state.current = Math.min(saved.current || 0, Math.max(0, state.photos.length - 1));
+  let maxId = 0;
+  for (const p of state.photos) {
+    for (const b of p.boxes) {
+      const n = Number(String(b.id).replace('b', ''));
+      if (Number.isFinite(n)) maxId = Math.max(maxId, n);
+    }
+  }
+  nextId = maxId + 1;
+}
+
+/* ------------------------------------------------------------------ 화면 묶기 */
+
+function renderPhotos() {
+  const strip = $('#photo-strip');
+  strip.textContent = '';
+  strip.hidden = state.photos.length < 1;
+  state.photos.forEach((p, i) => {
+    const c = makeCanvas(56, 56);
+    const ctx = c.getContext('2d');
+    ctx.imageSmoothingEnabled = true;
+    const s = Math.min(56 / p.bitmap.width, 56 / p.bitmap.height);
+    const w = p.bitmap.width * s;
+    const h = p.bitmap.height * s;
+    ctx.drawImage(p.bitmap, (56 - w) / 2, (56 - h) / 2, w, h);
+    strip.append(el('button', {
+      class: `photo-chip${i === state.current ? ' on' : ''}`,
+      type: 'button',
+      title: p.name,
+      onclick: () => {
+        state.current = i;
+        state.selected = null;
+        fitView();
+        renderAll();
+      },
+    }, [c, el('span', { class: 'badge', text: String(p.boxes.length) })]));
+  });
+
+  const list = $('#photo-list');
+  list.textContent = '';
+  state.photos.forEach((p, i) => {
+    list.append(el('div', { class: 'row photo-row' }, [
+      el('span', { class: 'grow', text: `${i + 1}. ${p.name}` }),
+      el('span', { class: 'muted small', text: `${p.bitmap.width}×${p.bitmap.height}` }),
+      el('button', {
+        class: 'mini danger',
+        type: 'button',
+        text: '빼기',
+        onclick: async () => {
+          if (await confirmSheet('이 사진을 뺄까요?', '잡아 둔 자르기 상자도 함께 사라집니다.', '빼기')) removePhoto(i);
+        },
+      }),
+    ]));
+  });
+  $('#photo-empty').hidden = state.photos.length > 0;
+}
+
+function renderAll() {
+  renderPhotos();
+  renderPieces();
+  renderExport();
+  requestDraw();
+  const p = photo();
+  $('#subtitle').textContent = p
+    ? `${p.bitmap.width}×${p.bitmap.height} · ${p.boxes.length}군데`
+    : '사진을 불러오세요';
+}
+
+function goTab(tab) {
+  state.tab = tab;
+  for (const pane of $$('.pane')) pane.hidden = pane.dataset.pane !== tab;
+  for (const btn of $$('.tabbar button')) btn.classList.toggle('on', btn.dataset.tab === tab);
+  if (tab === 'cut') {
+    requestAnimationFrame(() => {
+      resizeStage();
+      if (!photo()) return;
+      if (view.dirty) fitView();
+      requestDraw();
+    });
+  }
+  if (tab === 'out') renderExport();
+}
+
+/* ------------------------------------------------------------------ 시작 */
+
+function bindControls() {
+  $('#file-input').addEventListener('change', (e) => { addFiles(e.target.files); e.target.value = ''; });
+  $('#camera-input').addEventListener('change', (e) => { addFiles(e.target.files); e.target.value = ''; });
+
+  const drop = $('#drop');
+  for (const ev of ['dragenter', 'dragover']) {
+    document.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add('over'); });
+  }
+  for (const ev of ['dragleave', 'drop']) {
+    document.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove('over'); });
+  }
+  document.addEventListener('drop', (e) => {
+    if (e.dataTransfer && e.dataTransfer.files.length) addFiles(e.dataTransfer.files);
+  });
+  document.addEventListener('paste', (e) => {
+    const files = Array.from(e.clipboardData?.files || []);
+    if (files.length) addFiles(files);
+  });
+
+  for (const btn of $$('.tabbar button')) btn.addEventListener('click', () => goTab(btn.dataset.tab));
+  for (const btn of $$('.seg button')) {
+    btn.addEventListener('click', () => {
+      state.tool = btn.dataset.tool;
+      for (const b of $$('.seg button')) b.classList.toggle('on', b === btn);
+      stage.classList.toggle('drawing', state.tool === 'draw');
+    });
+  }
+
+  $('#btn-detect').addEventListener('click', detect);
+  $('#btn-fit').addEventListener('click', fitView);
+  $('#btn-clear').addEventListener('click', async () => {
+    const p = photo();
+    if (!p || !p.boxes.length) return;
+    if (await confirmSheet('이 사진의 상자를 모두 지울까요?', null, '지우기')) {
+      p.boxes = [];
+      state.selected = null;
+      renderAll();
+      persist();
+    }
+  });
+  $('#btn-find').addEventListener('click', findByNumber);
+  $('#q-code').addEventListener('keydown', (e) => { if (e.key === 'Enter') findByNumber(); });
+
+  bindNumber('#s-strength', state.detect, 'strength', '#v-strength', (v) => v.toFixed(1));
+  bindNumber('#s-join', state.detect, 'join', '#v-join', (v) => `${(v * 100).toFixed(1)}%`);
+  bindNumber('#s-pad', state.detect, 'pad', '#v-pad', (v) => `${Math.round(v * 100)}%`);
+  bindNumber('#s-band', state.detect, 'band', '#v-band', (v) => `${Math.round(v * 100)}%`);
+  bindSelect('#s-mode', state.detect, 'mode');
+  bindSelect('#s-side', state.detect, 'side');
+  bindCheck('#s-solid', state.detect, 'ignoreSolid');
+  bindSelect('#f-dir', state.find, 'dir');
+  bindNumber('#f-size', state.find, 'size', '#v-size', (v) => `${v.toFixed(1)}배`);
+
+  $('#sort-mode').addEventListener('change', (e) => {
+    state.sortMode = e.target.value;
+    resort();
+    saveSettings();
+    renderAll();
+    persist();
+  });
+  $('#palette-sel').addEventListener('change', async (e) => {
+    state.paletteId = e.target.value;
+    state.palette = null;
+    saveSettings();
+    for (const p of state.photos) for (const b of p.boxes) delete b.matches;
+    await analyzeColors({ quiet: true });
+  });
+  $('#palette-file').addEventListener('change', (e) => {
+    if (e.target.files[0]) addPalette(e.target.files[0]);
+    e.target.value = '';
+  });
+  $('#btn-analyze').addEventListener('click', () => analyzeColors());
+  $('#btn-palette-del').addEventListener('click', async () => {
+    if (state.paletteId === 'dmc') { toast('DMC 색상표는 지울 수 없습니다.'); return; }
+    if (!await confirmSheet('이 색상표를 지울까요?', null, '지우기')) return;
+    saveCustomList(loadCustomList().filter((p) => p.id !== state.paletteId));
+    state.paletteId = 'dmc';
+    state.palette = null;
+    renderPaletteSelect();
+    saveSettings();
+    await analyzeColors({ quiet: true });
+  });
+
+  for (const key of ['layout', 'columns', 'gap', 'label', 'bg']) {
+    const node = $(`#o-${key}`);
+    node.addEventListener('input', () => {
+      state.out[key] = node.type === 'range' || node.type === 'number' ? Number(node.value) : node.value;
+      if (key === 'gap') $('#v-gap').textContent = `${state.out.gap}px`;
+      saveSettings();
+      renderExport();
+    });
+  }
+  $('#btn-save-all').addEventListener('click', saveAllPieces);
+  $('#btn-save-sheet').addEventListener('click', saveSheet);
+  $('#btn-copy-csv').addEventListener('click', async () => {
+    toast(await copyText(tableToCsv()) ? 'CSV 를 복사했습니다.' : '복사하지 못했습니다.', '');
+  });
+  $('#btn-copy-text').addEventListener('click', async () => {
+    toast(await copyText(tableToText()) ? '목록을 복사했습니다.' : '복사하지 못했습니다.', '');
+  });
+  $('#btn-save-csv').addEventListener('click', async () => {
+    const blob = new Blob(['﻿', tableToCsv()], { type: 'text/csv;charset=utf-8' });
+    if (await saveFile(blob, '실_색코드.csv') === 'failed') toast('저장하지 못했습니다.', 'bad');
+  });
+
+  $('#opt-remember').addEventListener('change', (e) => {
+    try { localStorage.setItem('floss.remember', e.target.checked ? '1' : '0'); } catch (err) { /* 저장 막힘 */ }
+    persist();
+  });
+  $('#btn-reset').addEventListener('click', async () => {
+    if (!await confirmSheet('처음 상태로 되돌릴까요?', '불러온 사진과 자른 상자가 모두 사라집니다.', '되돌리기')) return;
+    for (const p of state.photos) if (p.bitmap && p.bitmap.close) p.bitmap.close();
+    state.photos = [];
+    state.current = 0;
+    state.selected = null;
+    await db.del('session');
+    renderAll();
+    goTab('photo');
+  });
+
+  $('#btn-theme').addEventListener('click', () => {
+    const order = ['auto', 'light', 'dark'];
+    const next = order[(order.indexOf(getTheme()) + 1) % order.length];
+    setTheme(next);
+    $('#btn-theme').textContent = next === 'auto' ? '🌗' : (next === 'light' ? '☀️' : '🌙');
+  });
+
+  window.addEventListener('resize', () => {
+    resizeStage();
+    if (state.tab === 'cut') requestDraw();
+  });
+}
+
+function bindNumber(sel, target, key, valueSel, format) {
+  const node = $(sel);
+  node.value = target[key];
+  const show = () => { if (valueSel) $(valueSel).textContent = format(Number(node.value)); };
+  show();
+  node.addEventListener('input', () => {
+    target[key] = Number(node.value);
+    show();
+    saveSettings();
+  });
+}
+
+function bindCheck(sel, target, key) {
+  const node = $(sel);
+  node.checked = !!target[key];
+  node.addEventListener('change', () => {
+    target[key] = node.checked;
+    saveSettings();
+  });
+}
+
+function bindSelect(sel, target, key) {
+  const node = $(sel);
+  node.value = target[key];
+  node.addEventListener('change', () => {
+    target[key] = node.value;
+    saveSettings();
+  });
+}
+
+function fillSortSelect() {
+  const sel = $('#sort-mode');
+  sel.textContent = '';
+  for (const [value, text] of Object.entries(SORT_LABELS)) sel.append(el('option', { value, text }));
+  sel.value = state.sortMode;
+}
+
+async function main() {
+  loadSettings();
+  setTheme(getTheme());
+  $('#btn-theme').textContent = getTheme() === 'auto' ? '🌗' : (getTheme() === 'light' ? '☀️' : '🌙');
+
+  stage = $('#stage');
+  stageCtx = stage.getContext('2d');
+
+  fillSortSelect();
+  renderPaletteSelect();
+  bindControls();
+  bindStage();
+
+  let remember = true;
+  try { remember = localStorage.getItem('floss.remember') !== '0'; } catch (e) { /* 막힘 */ }
+  $('#opt-remember').checked = remember;
+
+  for (const key of ['layout', 'columns', 'gap', 'label', 'bg']) $(`#o-${key}`).value = state.out[key];
+  $('#v-gap').textContent = `${state.out.gap}px`;
+
+  if (remember) await restore();
+  resizeStage();
+  fitView();
+  renderAll();
+  goTab(state.photos.length ? 'cut' : 'photo');
+
+  ensurePalette();
+
+  if ('serviceWorker' in navigator && !globalThis.__FLOSS_STANDALONE__) {
+    navigator.serviceWorker.register('./sw.js').catch(() => { /* 오프라인 기능만 빠집니다 */ });
+  }
+}
+
+main();
+
+  return {  };
+})();
+</script>
+</body>
+</html>

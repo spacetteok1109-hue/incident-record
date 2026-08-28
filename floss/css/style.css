@@ -29,7 +29,8 @@
   --shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
 }
 
-html[data-theme='light'] {
+/* 밝은 화면. 보는 사람이 직접 고른 경우와, 기기 설정이 밝은 경우 둘 다 챙깁니다. */
+:root[data-theme='light'] {
   color-scheme: light;
   --bg: #f4f5f8;
   --bg-elev: #ffffff;
@@ -47,6 +48,28 @@ html[data-theme='light'] {
   --danger: #c53f4b;
   --danger-soft: rgba(197, 63, 75, 0.12);
   --shadow: 0 8px 24px rgba(20, 24, 40, 0.14);
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme='dark']) {
+  color-scheme: light;
+  --bg: #f4f5f8;
+  --bg-elev: #ffffff;
+  --bg-elev-2: #eef0f5;
+  --bg-input: #ffffff;
+  --line: #dfe2ea;
+  --line-soft: #eaecf2;
+  --text: #1a1d24;
+  --text-dim: #5c6472;
+  --text-faint: #8b93a3;
+  --accent: #0f9d6f;
+  --accent-ink: #0b8560;
+  --on-accent: #ffffff;
+  --accent-soft: rgba(15, 157, 111, 0.12);
+  --danger: #c53f4b;
+  --danger-soft: rgba(197, 63, 75, 0.12);
+  --shadow: 0 8px 24px rgba(20, 24, 40, 0.14);
+}
 }
 
 * { box-sizing: border-box; }

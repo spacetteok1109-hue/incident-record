@@ -30,6 +30,13 @@ const cache = new Map();
 
 export async function loadBuiltin(id = 'dmc') {
   if (cache.has(id)) return cache.get(id);
+  // 한 파일짜리 페이지에서는 색상표가 페이지 안에 함께 들어 있습니다.
+  const embedded = globalThis.__FLOSS_DATA__ && globalThis.__FLOSS_DATA__[id];
+  if (embedded) {
+    const ready = prepare(embedded);
+    cache.set(id, ready);
+    return ready;
+  }
   const res = await fetch(`./data/${id}.json`, { cache: 'force-cache' });
   if (!res.ok) throw new Error(`색상표를 불러오지 못했습니다 (${res.status})`);
   const p = prepare(await res.json());
