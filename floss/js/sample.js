@@ -52,6 +52,16 @@ export function representativeColor(img, opt = {}) {
   if (skipPaper && pts.length < total * 0.15) pts = collect(false);
   if (!pts.length) return null;
 
+  // 실타래는 가닥 사이에 그늘이 지고 겉면은 반들거립니다. 그 양끝을 걷어 내고
+  // 사람이 보는 "실 겉면" 밝기대만 남깁니다. (밝기 순서로 자르므로 진한 실도 그대로 진합니다.)
+  if (opt.trimShade !== false && pts.length > 40) {
+    const sorted = pts.slice().sort((a, b) => a[0] - b[0]);
+    const lo = sorted[Math.floor(sorted.length * 0.45)][0];
+    const hi = sorted[Math.floor(sorted.length * 0.92)][0];
+    const lit = pts.filter((lab) => lab[0] >= lo && lab[0] <= hi);
+    if (lit.length >= 20) pts = lit;
+  }
+
   // Lab 공간을 격자로 나눠 가장 붐비는 칸을 찾습니다.
   const BL = 6;
   const BA = 8;

@@ -1,7 +1,7 @@
 /* detect.js — 사진에서 빨간선을 찾아 자를 영역을 계산합니다.
    원본 픽셀은 읽기만 하고 절대 고치지 않습니다. */
 
-import { isRedPixel } from './color.js';
+import { isRedPixel, chroma } from './color.js';
 
 /** 분석은 작은 사본에서 하고, 결과 좌표만 원본 크기로 되돌립니다. */
 export const ANALYSIS_MAX = 1400;
@@ -114,6 +114,18 @@ export function classifyBlob(blob, w, h) {
   return 'mark';
 }
 
+/**
+ * 설정과 표시 모양을 합쳐 "어떻게 자를지"를 정합니다.
+ *  'inside'  빨간 테두리 안쪽
+ *  'column'  표시에서 실 쪽으로 사진 끝까지 (색상표 사진의 기본)
+ *  'band'    빨간 줄 옆의 띠
+ *  'mark'    표시 둘레
+ */
+export function resolveKind(blob, w, h, mode) {
+  if (mode && mode !== 'auto') return mode;
+  return classifyBlob(blob, w, h) === 'frame' ? 'inside' : 'column';
+}
+
 /** 선 굵기를 대충 추정합니다(둘레 대비 픽셀 수). */
 export function strokeWidth(blob) {
   const perimeter = 2 * (blob.w + blob.h);
@@ -162,10 +174,10 @@ function clampBox(b, w, h) {
  *   side    'both' | 'before' | 'after'  (띠를 선의 어느 쪽에 둘지)
  */
 export function blobToBox(blob, w, h, opt) {
-  const kind = opt.mode === 'auto' ? classifyBlob(blob, w, h) : opt.mode;
+  const kind = resolveKind(blob, w, h, opt.mode);
   const t = strokeWidth(blob);
 
-  if (kind === 'frame' || kind === 'inside') {
+  if (kind === 'inside') {
     // 빨간 테두리 안쪽만. 선 굵기 + 1px 만큼 더 들어가서 빨강이 섞이지 않게 합니다.
     const inset = t + 1 + Math.round(Math.min(blob.w, blob.h) * opt.pad * 0.5);
     return clampBox({
@@ -173,7 +185,9 @@ export function blobToBox(blob, w, h, opt) {
     }, w, h);
   }
 
-  if (kind === 'line' || kind === 'band') {
+  if (kind === 'column') return columnBox(blob, w, h, opt, t);
+
+  if (kind === 'band') {
     const horizontal = blob.w >= blob.h;
     const thickness = Math.max(12, Math.round(Math.min(w, h) * opt.band));
     const grow = Math.round((horizontal ? blob.w : blob.h) * opt.pad);
@@ -198,6 +212,94 @@ export function blobToBox(blob, w, h, opt) {
   return clampBox({
     x: blob.x - grow, y: blob.y - grow, w: blob.w + grow * 2, h: blob.h + grow * 2,
   }, w, h);
+}
+
+/**
+ * 표시에서 실이 있는 쪽으로 사진 끝까지 이어지는 긴 네모를 만듭니다.
+ * 색상표 사진처럼 번호 밑에 실타래가 길게 늘어진 경우에 쓰는 방식입니다.
+ */
+function columnBox(blob, w, h, opt, t) {
+  const down = blob.w >= blob.h; // 가로로 그은 표시 -> 실은 위아래로 길게
+  const widen = Math.max(0, opt.width ?? 0.4);
+
+  if (down) {
+    const grow = Math.round((blob.w * widen) / 2);
+    const x = blob.x - grow;
+    const bw = blob.w + grow * 2;
+    const side = opt.side === 'auto'
+      ? pickFarSide(opt.pixels, { x, w: bw }, blob.y - t, blob.y + blob.h + t, true, w, h)
+      : opt.side;
+    let y0 = side === 'before' ? 0 : blob.y + blob.h + t;
+    let y1 = side === 'before' ? blob.y - t : h;
+    if (opt.trim !== false) {
+      ({ from: y0, to: y1 } = trimPaper(opt.pixels, { x, w: bw }, y0, y1, true, side === 'before' ? 'to' : 'from'));
+    }
+    return clampBox({ x, y: y0, w: bw, h: y1 - y0 }, w, h);
+  }
+
+  const grow = Math.round((blob.h * widen) / 2);
+  const y = blob.y - grow;
+  const bh = blob.h + grow * 2;
+  const side = opt.side === 'auto'
+    ? pickFarSide(opt.pixels, { x: y, w: bh }, blob.x - t, blob.x + blob.w + t, false, w, h)
+    : opt.side;
+  let x0 = side === 'before' ? 0 : blob.x + blob.w + t;
+  let x1 = side === 'before' ? blob.x - t : w;
+  if (opt.trim !== false) {
+    ({ from: x0, to: x1 } = trimPaper(opt.pixels, { x: y, w: bh }, x0, x1, false, side === 'before' ? 'to' : 'from'));
+  }
+  return clampBox({ x: x0, y, w: x1 - x0, h: bh }, w, h);
+}
+
+/** 표시의 위/아래(또는 좌/우) 중 사진 끝까지 봤을 때 색이 더 많은 쪽 */
+function pickFarSide(pixels, across, beforeEnd, afterStart, vertical, w, h) {
+  if (!pixels) return 'after';
+  const rect = (from, to) => (vertical
+    ? { x: across.x, y: from, w: across.w, h: to - from }
+    : { x: from, y: across.x, w: to - from, h: across.w });
+  const before = beforeEnd > 4 ? regionChroma(pixels, rect(0, beforeEnd)) : -1;
+  const after = (vertical ? h : w) - afterStart > 4
+    ? regionChroma(pixels, rect(afterStart, vertical ? h : w)) : -1;
+  return before > after ? 'before' : 'after';
+}
+
+/**
+ * 표시와 실 사이에 낀 흰 여백(번호 칸·종이)을 걷어 냅니다.
+ * 실 끝이 잘리면 안 되므로 **표시에 가까운 쪽 끝에서만** 깎습니다.
+ * @param nearEnd 'from' 또는 'to' — 표시가 붙어 있는 쪽
+ */
+function trimPaper(pixels, across, from, to, vertical, nearEnd) {
+  if (!pixels || to - from < 8) return { from, to };
+  const { data, width: iw, height: ih } = pixels;
+  const a0 = Math.max(0, Math.round(across.x));
+  const a1 = Math.min(vertical ? iw : ih, Math.round(across.x + across.w));
+  if (a1 <= a0) return { from, to };
+  const step = Math.max(1, Math.round((a1 - a0) / 40));
+
+  const colored = (pos) => {
+    let hit = 0;
+    let n = 0;
+    for (let a = a0; a < a1; a += step) {
+      const px = vertical ? a : pos;
+      const py = vertical ? pos : a;
+      if (px < 0 || py < 0 || px >= iw || py >= ih) continue;
+      const p = (py * iw + px) * 4;
+      if (chroma(data[p], data[p + 1], data[p + 2]) >= 22) hit += 1;
+      n += 1;
+    }
+    return n > 0 && hit / n >= 0.25;
+  };
+
+  const limit = Math.floor((to - from) * 0.6); // 너무 많이 깎지 않도록
+  let start = from;
+  let end = to;
+  if (nearEnd === 'to') {
+    while (end > start + 4 && to - end < limit && !colored(end - 1)) end -= 1;
+  } else {
+    while (start < end && start - from < limit && !colored(start)) start += 1;
+  }
+  if (end - start < 8) return { from, to };
+  return { from: start, to: end };
 }
 
 /** 줄 양옆 중 색이 더 짙은 쪽(=실이 있는 쪽)을 고릅니다. */
@@ -279,6 +381,7 @@ export function detectRedRegions(imageData, scale, opt) {
 
   const minSide = Math.min(w, h);
   const thickLimit = Math.max(5, minSide * 0.022);
+  const minRedPixels = Math.max(40, Math.round(w * h * 0.00006));
   const withPixels = { ...opt, pixels: imageData };
 
   const boxes = blobs.map((b) => {
@@ -291,14 +394,23 @@ export function detectRedRegions(imageData, scale, opt) {
       h: Math.max(1, b.h - radius * 2),
       pixels: countInside(raw, w, h, b),
     };
-    if (opt.ignoreSolid !== false && strokeWidth(tight) > thickLimit) return null;
+    if (opt.ignoreSolid !== false) {
+      // 굵고 꽉 찬 덩어리는 표시가 아니라 빨간 실입니다.
+      if (strokeWidth(tight) > thickLimit) return null;
+      // 실 가닥에서 튀는 붉은 점들은 넓게 흩어져 있어 상자를 거의 채우지 못합니다.
+      // 둘러친 표시(테두리)는 원래 속이 비어 있으므로 이 잣대에서 빼 둡니다.
+      if (classifyBlob(tight, w, h) !== 'frame') {
+        const fill = tight.pixels / Math.max(1, tight.w * tight.h);
+        if (tight.pixels < minRedPixels || fill < 0.2) return null;
+      }
+    }
     const box = blobToBox(tight, w, h, withPixels);
     return {
       x: Math.round(box.x / scale),
       y: Math.round(box.y / scale),
       w: Math.max(2, Math.round(box.w / scale)),
       h: Math.max(2, Math.round(box.h / scale)),
-      kind: opt.mode === 'auto' ? classifyBlob(tight, w, h) : opt.mode,
+      kind: resolveKind(tight, w, h, opt.mode),
     };
   }).filter(Boolean);
   return dedupe(boxes);

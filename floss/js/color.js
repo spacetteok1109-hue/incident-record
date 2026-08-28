@@ -123,16 +123,29 @@ export function readableInk(r, g, b) {
   return lum > 0.4 ? '#000000' : '#ffffff';
 }
 
-/** 빨간선 판정: 붉은 기가 뚜렷하고 어둡지 않은 픽셀 */
+/**
+ * 빨간선 판정.
+ *
+ * 분홍·살구·자주 실과 빨간 펜 자국을 가르는 기준입니다. 실제 색상표 사진을 재 보면
+ *   빨간 펜  (253, 89, 88) — 빨강이 아주 밝고, 초록·파랑이 뚝 떨어집니다
+ *   살구 실  (235,161,160) — 빨강은 밝지만 초록·파랑도 함께 높습니다(탁함)
+ *   진분홍 실(127, 57, 55) — 선명하지만 전체가 어둡습니다
+ * 그래서 "빨강이 밝고, 선명하고, 초록·파랑과 크게 벌어진" 세 가지를 함께 봅니다.
+ *
+ * @param strength 1이 기본. 낮추면 옅은 표시까지 잡고, 높이면 진한 빨강만 잡습니다.
+ */
 export function isRedPixel(r, g, b, strength = 1) {
-  // strength 가 클수록 까다롭게(진한 빨강만), 작을수록 넉넉하게 잡습니다.
-  const gap = r - Math.max(g, b);
-  const minGap = 26 + 26 * strength;
-  const ratio = 1.15 + 0.22 * strength;
+  const mx = Math.max(r, g, b);
+  if (r !== mx) return false; // 빨강이 가장 센 색이어야 합니다
+  const sat = mx ? (mx - Math.min(r, g, b)) / mx : 0;
   return (
-    r >= 60
-    && gap >= minGap
-    && r >= g * ratio
-    && r >= b * ratio
+    r >= 120 + 65 * strength
+    && sat >= 0.30 + 0.25 * strength
+    && r - Math.max(g, b) >= 40 + 50 * strength
   );
+}
+
+/** 색이 얼마나 짙은지(0~255). 흰 종이는 0에 가깝습니다. */
+export function chroma(r, g, b) {
+  return Math.max(r, g, b) - Math.min(r, g, b);
 }

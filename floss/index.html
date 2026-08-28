@@ -133,27 +133,40 @@
             </label>
             <label>자르는 기준
               <select id="s-mode">
-                <option value="auto">알아서 (테두리는 안쪽, 줄은 옆 띠)</option>
+                <option value="auto">알아서 (둘러친 표시는 안쪽, 나머지는 세로로 길게)</option>
+                <option value="column">표시에서 실 쪽으로 사진 끝까지 (세로로 길게)</option>
                 <option value="inside">빨간 테두리 안쪽</option>
                 <option value="band">빨간 줄 옆의 띠</option>
                 <option value="mark">표시 둘레</option>
               </select>
             </label>
-            <label>띠를 놓을 쪽
+            <label>실이 있는 쪽
               <select id="s-side">
                 <option value="auto">알아서 (색이 있는 쪽)</option>
-                <option value="both">줄 가운데(양쪽)</option>
-                <option value="before">줄 위 / 왼쪽</option>
-                <option value="after">줄 아래 / 오른쪽</option>
+                <option value="after">표시 아래 / 오른쪽</option>
+                <option value="before">표시 위 / 왼쪽</option>
+                <option value="both">줄 가운데(띠일 때만)</option>
               </select>
             </label>
-            <label>여백 <span class="val" id="v-pad"></span>
-              <input type="range" id="s-pad" min="0" max="0.4" step="0.01" />
+            <label>좌우 여유 <span class="val" id="v-width"></span>
+              <input type="range" id="s-width" min="0" max="1.5" step="0.05" />
             </label>
             <label>띠 두께 <span class="val" id="v-band"></span>
               <input type="range" id="s-band" min="0.02" max="0.4" step="0.01" />
             </label>
+            <label>여백 <span class="val" id="v-pad"></span>
+              <input type="range" id="s-pad" min="0" max="0.4" step="0.01" />
+            </label>
           </div>
+          <label class="check">
+            <input type="checkbox" id="s-trim" /> 표시와 실 사이의 흰 여백 걷어 내기
+          </label>
+          <p class="muted small">
+            색상표 사진처럼 <b>번호 밑에 실타래가 길게 늘어진</b> 사진에서는 표시한 자리부터
+            사진 끝까지 세로로 잘라야 실이 다 담깁니다. 그게 기본 동작이고,
+            <b>좌우 여유</b>로 타래 폭에 맞춰 넓히거나 좁힐 수 있습니다.
+            실 끝이 잘리지 않도록 <b>바깥쪽 끝은 깎지 않습니다.</b>
+          </p>
           <label class="check">
             <input type="checkbox" id="s-solid" /> 빨간 실은 표시로 보지 않기
           </label>

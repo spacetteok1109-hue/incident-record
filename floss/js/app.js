@@ -24,7 +24,15 @@ const DEFAULTS = {
   sortMode: 'reading',
   paletteId: 'dmc',
   detect: {
-    strength: 1, join: 0.008, mode: 'auto', pad: 0, band: 0.1, side: 'auto', ignoreSolid: true,
+    strength: 1,
+    join: 0.008,
+    mode: 'auto',
+    pad: 0,
+    band: 0.1,
+    width: 0.3,
+    trim: true,
+    side: 'auto',
+    ignoreSolid: true,
   },
   find: { dir: 'auto', size: 6 },
   out: {
@@ -778,6 +786,12 @@ function renderPieces() {
           }),
         ]) : el('p', { class: 'muted small', text: '“색코드 뽑기”를 누르면 색을 읽습니다.' }),
         chips.length ? el('div', { class: 'chips' }, chips) : null,
+        box.matches && box.matches[0] && box.matches[0].de > 6
+          ? el('p', {
+            class: 'muted small',
+            text: '이 책자에는 이만큼 비슷한 색이 없습니다. 다른 책자를 넣어 보세요.',
+          })
+          : null,
         el('div', { class: 'row tight actions' }, [
           el('button', { class: 'mini', type: 'button', text: '↑', title: '앞으로', onclick: () => movePiece(pc, -1) }),
           el('button', { class: 'mini', type: 'button', text: '↓', title: '뒤로', onclick: () => movePiece(pc, 1) }),
@@ -1166,9 +1180,11 @@ function bindControls() {
   bindNumber('#s-join', state.detect, 'join', '#v-join', (v) => `${(v * 100).toFixed(1)}%`);
   bindNumber('#s-pad', state.detect, 'pad', '#v-pad', (v) => `${Math.round(v * 100)}%`);
   bindNumber('#s-band', state.detect, 'band', '#v-band', (v) => `${Math.round(v * 100)}%`);
+  bindNumber('#s-width', state.detect, 'width', '#v-width', (v) => `${Math.round(v * 100)}%`);
   bindSelect('#s-mode', state.detect, 'mode');
   bindSelect('#s-side', state.detect, 'side');
   bindCheck('#s-solid', state.detect, 'ignoreSolid');
+  bindCheck('#s-trim', state.detect, 'trim');
   bindSelect('#f-dir', state.find, 'dir');
   bindNumber('#f-size', state.find, 'size', '#v-size', (v) => `${v.toFixed(1)}배`);
 
