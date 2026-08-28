@@ -80,6 +80,58 @@ html[data-theme='modern'] {
   --shadow: 0 10px 32px rgba(0, 0, 0, 0.6);
 }
 
+/* 흰색 + 검정 */
+html[data-theme='mono'] {
+  color-scheme: light;
+  --bg: #f5f5f6;
+  --bg-elev: #ffffff;
+  --bg-elev-2: #ececee;
+  --bg-input: #ffffff;
+  --line: #dcdce1;
+  --line-soft: #eaeaee;
+  --text: #131316;
+  --text-dim: #55555d;
+  --text-faint: #8b8b94;
+  --accent: #1c1c1f;
+  --accent-ink: #1c1c1f;
+  --on-accent: #ffffff;
+  --accent-soft: #ebebee;
+  --accent-glow: rgba(0, 0, 0, 0.22);
+  --notice-line: #d5d5da;
+  --danger: #cf3348;
+  --warn: #9a6400;
+  --ok: #1f7a52;
+  --sun: #c4405a;
+  --sat: #3f6fb5;
+  --shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+
+/* 흰색 + 노랑 */
+html[data-theme='sunny'] {
+  color-scheme: light;
+  --bg: #fffdf4;
+  --bg-elev: #ffffff;
+  --bg-elev-2: #fdf3d6;
+  --bg-input: #ffffff;
+  --line: #ebdeb5;
+  --line-soft: #f6ecd1;
+  --text: #2a2418;
+  --text-dim: #675c42;
+  --text-faint: #a1977a;
+  --accent: #ffd029;
+  --accent-ink: #8a5a00;
+  --on-accent: #3a2c00;
+  --accent-soft: #fff2c6;
+  --accent-glow: rgba(224, 176, 20, 0.45);
+  --notice-line: #f0dc9a;
+  --danger: #c4384b;
+  --warn: #a76a00;
+  --ok: #2c7a54;
+  --sun: #c8465e;
+  --sat: #4a7fbb;
+  --shadow: 0 8px 24px rgba(120, 92, 0, 0.14);
+}
+
 /* 하양 + 연하늘색 */
 html[data-theme='sky'] {
   color-scheme: light;
@@ -94,7 +146,7 @@ html[data-theme='sky'] {
   --text-faint: #8fb4c9;
   --accent: #2494d0;
   --accent-ink: #0f6d9e;
-  --on-accent: #ffffff;
+  --on-accent: #04202f;
   --accent-soft: #dcf0fb;
   --accent-glow: rgba(36, 148, 208, 0.38);
   --notice-line: #a9d8f2;
@@ -231,7 +283,7 @@ main {
   align-items: center;
   justify-content: center;
   gap: 3px;
-  color: var(--text-faint);
+  color: var(--text-dim);
   font-size: 11px;
   font-weight: 600;
 }

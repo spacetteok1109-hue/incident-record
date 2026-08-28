@@ -13,7 +13,7 @@ import {
   relativeDateLabel, diffDays, periodProgress, formatRange, REPEAT_LABELS, bytesToText, debounce,
 } from './util.js';
 
-const APP_VERSION = '1.4.0';
+const APP_VERSION = '1.5.0';
 
 const state = {
   tab: 'today',
@@ -826,14 +826,16 @@ async function renderSettings() {
   const viewGroup = group('표시');
   viewGroup.append(settingsRow({
     label: '테마',
-    value: { auto: '기기 설정', dark: '어둡게', light: '밝게', sky: '하양·하늘', modern: '모던' }[state.settings.theme],
+    value: THEME_LABELS[state.settings.theme] || '기기 설정',
     onclick: async () => {
       const v = await pickerSheet({
         title: '테마',
         value: state.settings.theme,
         options: [
-          { value: 'modern', label: '모던', emoji: '🖤', desc: '짙은 먹색 바탕에 민트 포인트' },
-          { value: 'sky', label: '하양 · 하늘색', emoji: '🩵', desc: '흰 바탕에 연하늘색 포인트' },
+          { value: 'mono', label: '흰색 · 검정', emoji: '🖤', desc: '흰 바탕에 검정 포인트' },
+          { value: 'sky', label: '흰색 · 하늘', emoji: '🩵', desc: '흰 바탕에 하늘색 포인트' },
+          { value: 'sunny', label: '흰색 · 노랑', emoji: '💛', desc: '흰 바탕에 노랑 포인트' },
+          { value: 'modern', label: '모던', emoji: '🌿', desc: '짙은 먹색 바탕에 민트 포인트' },
           { value: 'light', label: '밝게', emoji: '☀️' },
           { value: 'dark', label: '어둡게', emoji: '🌙' },
           { value: 'auto', label: '기기 설정 따르기', emoji: '⚙️' },
@@ -972,7 +974,20 @@ window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () 
   if (state.settings.theme === 'auto') applyTheme('auto');
 });
 
-const THEME_COLORS = { dark: '#0f1115', light: '#f4f5f8', sky: '#f3faff', modern: '#0b0c0e' };
+const THEME_LABELS = {
+  auto: '기기 설정',
+  dark: '어둡게',
+  light: '밝게',
+  sky: '흰색·하늘',
+  mono: '흰색·검정',
+  sunny: '흰색·노랑',
+  modern: '모던',
+};
+
+const THEME_COLORS = {
+  dark: '#0f1115', light: '#f4f5f8', sky: '#f3faff',
+  modern: '#0b0c0e', mono: '#f5f5f6', sunny: '#fffdf4',
+};
 
 /** 'auto'는 기기 설정을 읽어 실제 테마로 바꿔 줍니다. */
 function resolveTheme(theme) {
