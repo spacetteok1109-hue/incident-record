@@ -102,8 +102,8 @@
             <button id="btn-find" class="btn primary" type="button">찾기</button>
           </div>
           <p class="muted small" id="find-help">
-            사진에 적힌 번호를 읽어 그 실만 잘라 냅니다. 빨간선으로 이미 표시해 두었다면 그 자리를 씁니다.
-            (글자 읽기는 처음 한 번 인터넷이 필요합니다.)
+            고른 책자에 있는 번호면 그 색으로 바로 찾습니다(인터넷 없이 됩니다).
+            책자에 없으면 사진에 적힌 글자를 읽어 봅니다.
           </p>
           <div class="grid2">
             <label>실이 있는 쪽
@@ -211,6 +211,61 @@
         <div id="piece-list" class="pieces"></div>
       </section>
 
+
+      <!-- ─────────────────────────────── 책자 ─────────────────────────────── -->
+      <section class="pane" data-pane="book" hidden>
+        <div class="card">
+          <h2>번호로 실 찾기</h2>
+          <div class="row">
+            <input id="book-q" class="grow" placeholder="예: 1432" inputmode="text" />
+            <button id="book-find" class="btn primary" type="button">찾기</button>
+          </div>
+          <div id="book-result"></div>
+        </div>
+
+        <div class="card">
+          <h2>책자 고르기</h2>
+          <div class="row">
+            <select id="book-sel" class="grow"></select>
+          </div>
+          <div class="row wrap">
+            <button id="book-new" class="btn" type="button">새 책자 만들기</button>
+            <label class="btn">색상표 파일 넣기
+              <input type="file" id="book-file" accept=".csv,.json,.txt,text/csv,application/json" hidden />
+            </label>
+            <button id="book-csv" class="btn" type="button">CSV 로 내보내기</button>
+            <button id="book-del" class="btn danger" type="button">책자 지우기</button>
+          </div>
+          <p class="muted small" id="book-info">—</p>
+        </div>
+
+        <div class="card">
+          <h2>이 사진으로 책자 채우기</h2>
+          <p class="muted small">
+            번호 한 줄 아래로 실타래가 늘어진 카드 사진이면, 타래를 전부 찾아
+            번호와 짝지어 책자에 넣습니다. 한 장씩 넣을 때마다 색이 쌓입니다.
+          </p>
+          <div class="row wrap">
+            <button id="book-scan" class="btn primary" type="button">타래 찾기</button>
+            <button id="book-add" class="btn" type="button" disabled>책자에 넣기</button>
+            <span class="grow"></span>
+            <span class="muted small" id="book-scan-info">아직 찾지 않음</span>
+          </div>
+          <label class="grow">번호 한 번에 붙여넣기 (왼쪽부터 차례로)
+            <textarea id="book-codes" rows="2" placeholder="167 1811 1790 1809 1033 …"></textarea>
+          </label>
+          <div id="book-hanks" class="hanks"></div>
+        </div>
+
+        <div class="card">
+          <h2>책자 안의 색</h2>
+          <div class="row">
+            <input id="book-filter" class="grow" placeholder="번호로 걸러 보기" />
+          </div>
+          <div id="book-colors" class="swatches"></div>
+        </div>
+      </section>
+
       <!-- ─────────────────────────────── 내보내기 ─────────────────────────────── -->
       <section class="pane" data-pane="out" hidden>
         <div class="card">
@@ -288,6 +343,7 @@
       <button type="button" data-tab="photo" class="on"><span>🖼️</span>사진</button>
       <button type="button" data-tab="cut"><span>✂️</span>자르기</button>
       <button type="button" data-tab="list"><span>🧵</span>조각</button>
+      <button type="button" data-tab="book"><span>📕</span>책자</button>
       <button type="button" data-tab="out"><span>💾</span>내보내기</button>
     </nav>
   </div>

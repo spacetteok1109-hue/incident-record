@@ -4,7 +4,7 @@
    사진은 이 기기 밖으로 나가지 않습니다. */
 
 import {
-  $, $$, el, toast, confirmSheet, saveFile, copyText, setTheme, getTheme,
+  $, $$, el, toast, confirmSheet, promptSheet, saveFile, copyText, setTheme, getTheme,
 } from './ui.js';
 import * as db from './db.js';
 import { detectRedRegions, ANALYSIS_MAX, overlapRatio } from './detect.js';
@@ -14,7 +14,9 @@ import {
 import { representativeColor, medianAround } from './sample.js';
 import {
   loadPalette, loadCustomList, saveCustomList, parsePaletteText, match, findByCode,
+  createCustom, upsertColors, toCsv,
 } from './palette.js';
+import { findHanks } from './card.js';
 import { rgbToHex, readableInk, deltaEWord } from './color.js';
 import * as ocr from './ocr.js';
 
@@ -44,6 +46,7 @@ const DEFAULTS = {
 const state = {
   photos: [],
   current: 0,
+  scan: null, // 책자 만들기: 사진에서 찾아 둔 타래들
   palette: null,
   tool: 'view',
   selected: null,
@@ -495,7 +498,19 @@ async function findByNumber() {
   if (!query) { toast('찾을 번호나 표시를 적어 주세요.', 'bad'); return; }
 
   const help = $('#find-help');
-  help.textContent = '사진 속 글자를 읽는 중입니다… (처음 한 번은 시간이 걸립니다)';
+
+  // 1) 책자에 있는 번호라면 곧바로 그 색으로 찾습니다. 인터넷도 필요 없고 제일 정확합니다.
+  const palette = await ensurePalette();
+  const known = palette && findByCode(palette, query);
+  if (known) {
+    help.textContent = `${palette.name} 의 ${query} 번 색으로 찾는 중…`;
+    const message = await findInPhoto(known);
+    help.textContent = message || `${palette.name} 의 ${query} 번을 찾았지만, 사진에서 견줄 조각이 없습니다.`;
+    return;
+  }
+
+  // 2) 책자에 없으면 사진에 적힌 글자를 읽어 봅니다.
+  help.textContent = '책자에 없는 번호라 사진 속 글자를 읽어 봅니다… (처음 한 번은 시간이 걸립니다)';
 
   let words = p.words;
   if (!words) {
@@ -538,15 +553,10 @@ async function findByNumber() {
     return;
   }
 
-  // 글자를 못 읽었을 때: 책자에 있는 번호라면 색으로 찾아봅니다.
-  const byColor = await findByPaletteColor(p, query);
-  if (byColor) {
-    help.textContent = byColor;
-    return;
-  }
   help.textContent = words
-    ? `'${query}' 이라는 글자를 사진에서 찾지 못했습니다. 직접 그리기로 잡아 주세요.`
-    : '글자 인식기를 준비하지 못했습니다(인터넷 연결이 필요합니다). 번호는 조각 목록에서 손으로 적어 넣을 수 있습니다.';
+    ? `'${query}' 이라는 글자를 사진에서 찾지 못했습니다. 직접 그리기로 잡거나, 책자에 이 번호를 넣어 주세요.`
+    : `'${query}' 은(는) ${palette ? palette.name : '고른 책자'} 에 없고, 사진 속 글자도 읽지 못했습니다. `
+      + '책자 화면에서 카드 사진으로 번호를 채워 두면 인터넷 없이도 바로 찾습니다.';
 }
 
 /** 숫자 위치를 기준으로 실이 있을 자리를 잡습니다. */
@@ -618,28 +628,6 @@ function guessDirection(p, wd, reach) {
     right: probe(wd.x + wd.w, cy - reach / 2, reach * 0.9, reach),
   };
   return Object.entries(scores).sort((a, b) => b[1] - a[1])[0][0];
-}
-
-/** 번호가 책자에 있으면, 그 색과 가장 비슷한 조각을 알려 줍니다. */
-async function findByPaletteColor(p, query) {
-  const palette = await ensurePalette();
-  const target = palette && findByCode(palette, query);
-  if (!target) return null;
-  await analyzeColors({ quiet: true });
-  const pieces = allPieces().filter((pc) => pc.box.rgb);
-  if (!pieces.length) return null;
-  let best = null;
-  for (const pc of pieces) {
-    const de = match(pc.box.rgb, { colors: [target] }, 1)[0].de;
-    if (!best || de < best.de) best = { pc, de };
-  }
-  if (!best) return null;
-  state.current = state.photos.indexOf(best.pc.photo);
-  state.selected = best.pc.box.id;
-  if (!best.pc.box.label) best.pc.box.label = query;
-  renderAll();
-  requestDraw();
-  return `글자는 못 읽었지만, ${palette.name}의 ${query}번 색과 가장 비슷한 조각(${best.pc.index + 1}번, 차이 ΔE ${best.de.toFixed(1)})을 골라 두었습니다.`;
 }
 
 /* ---------------------------------------------------------------- 조각 목록 */
@@ -849,6 +837,202 @@ function startEyedrop(pc) {
     eyedrop = null;
   };
   stage.addEventListener('click', once);
+}
+
+
+/* ------------------------------------------------------------------ 책자 */
+
+function renderBookSelect() {
+  const sel = $('#book-sel');
+  sel.textContent = '';
+  sel.append(el('option', { value: 'dmc', text: 'DMC (25번 자수실) · 454색' }));
+  for (const p of loadCustomList()) {
+    sel.append(el('option', { value: p.id, text: `${p.name} · ${p.colors.length}색` }));
+  }
+  sel.value = state.paletteId;
+  if (sel.value !== state.paletteId) {
+    state.paletteId = 'dmc';
+    sel.value = 'dmc';
+  }
+  renderPaletteSelect();
+}
+
+async function renderBook() {
+  renderBookSelect();
+  const palette = await ensurePalette();
+  const info = $('#book-info');
+  if (!palette) { info.textContent = '색상표를 불러오지 못했습니다.'; return; }
+  info.textContent = state.paletteId === 'dmc'
+    ? 'DMC 는 기본으로 들어 있는 책자입니다. 지울 수 없습니다.'
+    : `${palette.name} · ${palette.colors.length}색. 이 브라우저 안에만 저장됩니다. CSV 로 내보내 두면 안전합니다.`;
+  renderBookColors();
+}
+
+function renderBookColors() {
+  const wrap = $('#book-colors');
+  wrap.textContent = '';
+  const palette = state.palette;
+  if (!palette) return;
+  const q = $('#book-filter').value.trim().toLowerCase();
+  const list = palette.colors
+    .filter((c) => !q || c.code.toLowerCase().includes(q) || (c.name || '').toLowerCase().includes(q))
+    .slice(0, 400);
+  if (!list.length) {
+    wrap.append(el('p', { class: 'muted small', text: q ? '찾는 번호가 없습니다.' : '아직 색이 없습니다. 아래에서 사진으로 채워 보세요.' }));
+    return;
+  }
+  for (const c of list) {
+    wrap.append(el('div', { class: 'swatch-cell', title: `${c.code} ${c.name || ''} ${c.hex}` }, [
+      el('div', { class: 'fill', style: { background: c.hex } }),
+      el('b', { text: c.code }),
+    ]));
+  }
+}
+
+/** 번호를 적으면 그 실을 보여 줍니다. 사진이 있으면 사진 속 자리도 찾아 줍니다. */
+async function lookupCode() {
+  const box = $('#book-result');
+  box.textContent = '';
+  const code = $('#book-q').value.trim();
+  if (!code) return;
+  const palette = await ensurePalette();
+  if (!palette) return;
+  const found = findByCode(palette, code);
+  if (!found) {
+    box.append(el('p', { class: 'muted small', text: `${palette.name} 에 ${code} 번이 없습니다. 아래에서 카드 사진으로 채워 넣어 주세요.` }));
+    return;
+  }
+  box.append(el('div', { class: 'found' }, [
+    el('div', { class: 'fill', style: { background: found.hex } }),
+    el('div', { class: 'grow' }, [
+      el('b', { text: `${found.code}${found.name ? ` · ${found.name}` : ''}` }),
+      el('p', { class: 'muted small', text: `${found.hex}${found.ko ? ` · ${found.ko}` : ''} · ${palette.name}` }),
+    ]),
+    photo() ? el('button', {
+      class: 'mini', type: 'button', text: '사진에서 찾기', onclick: () => findInPhoto(found),
+    }) : null,
+  ]));
+}
+
+/** 책자 색과 가장 비슷한 실을 지금 사진에서 찾아 잘라 둡니다. */
+async function findInPhoto(color) {
+  const p = photo();
+  if (!p) return null;
+  if (!p.boxes.length) detect();
+  await analyzeColors({ quiet: true });
+  const pieces = allPieces().filter((pc) => pc.box.rgb);
+  if (!pieces.length) {
+    toast('사진에서 자를 곳을 먼저 잡아 주세요.', 'bad');
+    return null;
+  }
+  let best = null;
+  for (const pc of pieces) {
+    const de = match(pc.box.rgb, { colors: [color] }, 1)[0].de;
+    if (!best || de < best.de) best = { pc, de };
+  }
+  state.current = state.photos.indexOf(best.pc.photo);
+  state.selected = best.pc.box.id;
+  if (!best.pc.box.label) best.pc.box.label = color.code;
+  renderAll();
+  goTab('cut');
+  const message = `${color.code} 와 가장 비슷한 조각을 골랐습니다 (${best.pc.index + 1}번, 차이 ΔE ${best.de.toFixed(1)}).`;
+  toast(message);
+  return message;
+}
+
+/** 카드 사진에서 실타래를 모두 찾습니다. */
+function scanHanks() {
+  const p = photo();
+  if (!p) { toast('카드 사진을 먼저 불러오세요.', 'bad'); return; }
+  const { data, scale } = analysisImageData(p);
+  const found = findHanks(data, { bottom: 'band' });
+  if (!found.hanks.length) {
+    $('#book-scan-info').textContent = '타래를 찾지 못했습니다.';
+    toast('타래를 찾지 못했습니다. 번호 줄과 실이 함께 나오게 찍어 주세요.', 'bad');
+    return;
+  }
+  state.scan = {
+    photo: p,
+    items: found.hanks.map((hk) => ({
+      box: {
+        x: Math.round(hk.x / scale),
+        y: Math.round(hk.y / scale),
+        w: Math.round(hk.w / scale),
+        h: Math.round(hk.h / scale),
+      },
+      code: '',
+      rgb: null,
+    })),
+  };
+  for (const item of state.scan.items) {
+    const img = readRegion(p, item.box, 160);
+    const rep = img ? representativeColor(img, state.sample) : null;
+    item.rgb = rep ? rep.rgb : null;
+  }
+  $('#book-scan-info').textContent = `${state.scan.items.length}개 찾음`;
+  $('#book-add').disabled = false;
+  renderHanks();
+  applyPastedCodes();
+}
+
+function renderHanks() {
+  const wrap = $('#book-hanks');
+  wrap.textContent = '';
+  if (!state.scan) return;
+  state.scan.items.forEach((item, i) => {
+    // 타래는 아주 길쭉하므로 위쪽만 보여 줍니다(색을 확인하기에는 충분합니다).
+    const shown = {
+      ...item.box,
+      h: Math.max(8, Math.min(item.box.h, Math.round(item.box.w * 1.5))),
+    };
+    const src = cropCanvas(state.scan.photo.bitmap, shown);
+    const c = makeCanvas(72, Math.max(24, Math.round((72 * src.height) / src.width)));
+    const ctx = c.getContext('2d');
+    ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(src, 0, 0, c.width, c.height);
+    wrap.append(el('div', { class: 'hank' }, [
+      c,
+      el('div', { class: 'dot', style: { background: item.rgb ? rgbToHex(...item.rgb) : 'transparent' } }),
+      el('input', {
+        value: item.code,
+        placeholder: `${i + 1}번`,
+        oninput: (e) => { item.code = e.target.value.trim(); },
+      }),
+    ]));
+  });
+}
+
+/** 붙여넣은 번호를 왼쪽부터 차례로 나눠 줍니다. */
+function applyPastedCodes() {
+  if (!state.scan) return;
+  const codes = $('#book-codes').value.split(/[\s,、·]+/).map((v) => v.trim()).filter(Boolean);
+  if (!codes.length) return;
+  state.scan.items.forEach((item, i) => { item.code = codes[i] || ''; });
+  renderHanks();
+  const extra = codes.length - state.scan.items.length;
+  $('#book-scan-info').textContent = extra === 0
+    ? `${state.scan.items.length}개 · 번호도 ${codes.length}개, 딱 맞습니다`
+    : `${state.scan.items.length}개 · 번호는 ${codes.length}개 (${extra > 0 ? `${extra}개 남음` : `${-extra}개 모자람`})`;
+}
+
+async function addScanToBook() {
+  if (!state.scan) return;
+  if (state.paletteId === 'dmc') {
+    toast('DMC 에는 넣을 수 없습니다. 새 책자를 만들어 주세요.', 'bad');
+    return;
+  }
+  const colors = state.scan.items
+    .filter((item) => item.code && item.rgb)
+    .map((item) => ({ code: item.code, name: '', hex: rgbToHex(...item.rgb) }));
+  if (!colors.length) {
+    toast('번호를 적은 타래가 없습니다.', 'bad');
+    return;
+  }
+  const result = upsertColors(state.paletteId, colors);
+  state.palette = null;
+  await renderBook();
+  saveSettings();
+  toast(`${result.added}개 넣고 ${result.updated}개 고쳤습니다.`);
 }
 
 /* ------------------------------------------------------------------ 내보내기 */
@@ -1129,6 +1313,7 @@ function goTab(tab) {
     });
   }
   if (tab === 'out') renderExport();
+  if (tab === 'book') renderBook();
 }
 
 /* ------------------------------------------------------------------ 시작 */
@@ -1200,6 +1385,7 @@ function bindControls() {
     state.palette = null;
     saveSettings();
     for (const p of state.photos) for (const b of p.boxes) delete b.matches;
+    renderBookSelect();
     await analyzeColors({ quiet: true });
   });
   $('#palette-file').addEventListener('change', (e) => {
@@ -1239,6 +1425,49 @@ function bindControls() {
     const blob = new Blob(['﻿', tableToCsv()], { type: 'text/csv;charset=utf-8' });
     if (await saveFile(blob, '실_색코드.csv') === 'failed') toast('저장하지 못했습니다.', 'bad');
   });
+
+  $('#book-find').addEventListener('click', lookupCode);
+  $('#book-q').addEventListener('keydown', (e) => { if (e.key === 'Enter') lookupCode(); });
+  $('#book-sel').addEventListener('change', async (e) => {
+    state.paletteId = e.target.value;
+    state.palette = null;
+    saveSettings();
+    for (const p of state.photos) for (const b of p.boxes) delete b.matches;
+    await renderBook();
+    await analyzeColors({ quiet: true });
+  });
+  $('#book-new').addEventListener('click', async () => {
+    const name = await promptSheet('새 책자 이름', '예: 앨리스(亚丽丝), 은행나무(银杏)', '앨리스');
+    if (!name) return;
+    state.paletteId = createCustom(name);
+    state.palette = null;
+    saveSettings();
+    await renderBook();
+    toast(`${name} 책자를 만들었습니다. 카드 사진으로 채워 보세요.`);
+  });
+  $('#book-file').addEventListener('change', (e) => {
+    if (e.target.files[0]) addPalette(e.target.files[0]).then(renderBook);
+    e.target.value = '';
+  });
+  $('#book-csv').addEventListener('click', async () => {
+    const palette = await ensurePalette();
+    if (!palette) return;
+    const blob = new Blob(['\ufeff', toCsv(palette)], { type: 'text/csv;charset=utf-8' });
+    if (await saveFile(blob, `${safeName(palette.name) || '책자'}.csv`) === 'failed') toast('저장하지 못했습니다.', 'bad');
+  });
+  $('#book-del').addEventListener('click', async () => {
+    if (state.paletteId === 'dmc') { toast('DMC 책자는 지울 수 없습니다.'); return; }
+    if (!await confirmSheet('이 책자를 지울까요?', '넣어 둔 색이 모두 사라집니다.', '지우기')) return;
+    saveCustomList(loadCustomList().filter((p) => p.id !== state.paletteId));
+    state.paletteId = 'dmc';
+    state.palette = null;
+    saveSettings();
+    await renderBook();
+  });
+  $('#book-scan').addEventListener('click', scanHanks);
+  $('#book-add').addEventListener('click', addScanToBook);
+  $('#book-codes').addEventListener('input', applyPastedCodes);
+  $('#book-filter').addEventListener('input', renderBookColors);
 
   $('#opt-remember').addEventListener('change', (e) => {
     try { localStorage.setItem('floss.remember', e.target.checked ? '1' : '0'); } catch (err) { /* 저장 막힘 */ }

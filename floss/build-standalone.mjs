@@ -14,7 +14,7 @@ const ROOT = dirname(fileURLToPath(import.meta.url));
 const read = (p) => readFileSync(join(ROOT, p), 'utf8');
 
 // 서로를 부르는 순서대로. 뒤쪽 모듈이 앞쪽 모듈을 씁니다.
-const MODULES = ['color', 'detect', 'crop', 'sample', 'palette', 'ocr', 'ui', 'db', 'app'];
+const MODULES = ['color', 'detect', 'crop', 'sample', 'card', 'palette', 'ocr', 'ui', 'db', 'app'];
 
 /** `import { a, b as c } from './x.js'` 같은 줄을 찾아 어떤 모듈을 쓰는지 알아냅니다. */
 function parseImports(code) {
@@ -55,9 +55,16 @@ function parseExports(code) {
   return { names, body };
 }
 
-const chunks = MODULES.map((name) => {
+const chunks = MODULES.map((name, index) => {
   const source = read(`js/${name}.js`);
   const { uses, body } = parseImports(source);
+  // 부르는 모듈이 목록에 없거나 순서가 뒤면 여기서 바로 걸립니다.
+  for (const line of uses) {
+    const from = line.match(/__m\.([a-z]+)/)[1];
+    const at = MODULES.indexOf(from);
+    if (at < 0) throw new Error(`js/${name}.js 가 부르는 '${from}' 이 MODULES 목록에 없습니다.`);
+    if (at >= index) throw new Error(`MODULES 순서가 잘못됐습니다: '${from}' 이 '${name}' 보다 뒤에 있습니다.`);
+  }
   const { names, body: stripped } = parseExports(body);
   return `__m.${name} = (function () {
 ${uses.map((u) => `  ${u}`).join('\n')}

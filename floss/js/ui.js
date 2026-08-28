@@ -52,6 +52,29 @@ export function confirmSheet(title, body, okLabel = '네') {
   });
 }
 
+/** 글자 하나 물어보기 */
+export function promptSheet(title, hint, placeholder = '') {
+  return new Promise((resolve) => {
+    const input = el('input', { placeholder, value: '' });
+    const close = (v) => { wrap.remove(); resolve(v); };
+    const ok = () => close(input.value.trim() || null);
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') ok(); });
+    const wrap = el('div', { class: 'sheet-wrap', onclick: (e) => { if (e.target === wrap) close(null); } }, [
+      el('div', { class: 'sheet' }, [
+        el('h2', { text: title }),
+        hint ? el('p', { class: 'muted small', text: hint }) : null,
+        input,
+        el('div', { class: 'sheet-actions' }, [
+          el('button', { class: 'btn', type: 'button', onclick: () => close(null), text: '취소' }),
+          el('button', { class: 'btn primary', type: 'button', onclick: ok, text: '만들기' }),
+        ]),
+      ]),
+    ]);
+    document.body.append(wrap);
+    setTimeout(() => input.focus(), 30);
+  });
+}
+
 /** 파일 하나 내려받기 (보통 브라우저) */
 function downloadBlob(blob, filename) {
   const url = URL.createObjectURL(blob);

@@ -164,6 +164,53 @@ function splitCsvLine(line) {
   return out.filter((c) => c !== '');
 }
 
+/** 새 책자를 만듭니다. 만들어진 id 를 돌려줍니다. */
+export function createCustom(name) {
+  const list = loadCustomList();
+  const id = `c${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`;
+  list.push({ id, name: name || '내 책자', colors: [] });
+  saveCustomList(list);
+  return id;
+}
+
+/**
+ * 책자에 색을 넣습니다. 같은 번호가 이미 있으면 새 값으로 바꿉니다.
+ * @returns {{added:number, updated:number}}
+ */
+export function upsertColors(id, colors) {
+  const list = loadCustomList();
+  const book = list.find((p) => p.id === id);
+  if (!book) throw new Error('책자를 찾지 못했습니다.');
+  let added = 0;
+  let updated = 0;
+  for (const c of colors) {
+    const code = String(c.code || '').trim();
+    const rgb = hexToRgb(c.hex);
+    if (!code || !rgb) continue;
+    const entry = { code, name: c.name || '', hex: rgbToHex(...rgb) };
+    const at = book.colors.findIndex((v) => v.code.toLowerCase() === code.toLowerCase());
+    if (at >= 0) { book.colors[at] = entry; updated += 1; } else { book.colors.push(entry); added += 1; }
+  }
+  book.colors.sort((a, b) => a.code.localeCompare(b.code, 'en', { numeric: true }));
+  saveCustomList(list);
+  return { added, updated };
+}
+
+export function renameCustom(id, name) {
+  const list = loadCustomList();
+  const book = list.find((p) => p.id === id);
+  if (!book) return;
+  book.name = name;
+  saveCustomList(list);
+}
+
+/** 책자를 CSV 글로 만듭니다. 백업하거나 다른 기기로 옮길 때 씁니다. */
+export function toCsv(palette) {
+  const q = (v) => `"${String(v).replace(/"/g, '""')}"`;
+  const rows = palette.colors.map((c) => [c.code, c.name || '', c.hex].map(q).join(','));
+  return ['"번호","이름","색상"', ...rows].join('\r\n');
+}
+
 /** 색 하나에 가장 가까운 실 번호를 가까운 순서로 돌려줍니다. */
 export function match(rgb, palette, topN = 3) {
   const lab = rgbToLab(rgb[0], rgb[1], rgb[2]);
