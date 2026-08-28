@@ -15,6 +15,7 @@
   --text-faint: #6b7383;
   --accent: #5865f2;
   --accent-ink: #8b96ff;
+  --on-accent: #ffffff;
   --accent-soft: rgba(88, 101, 242, 0.16);
   --accent-glow: rgba(88, 101, 242, 0.45);
   --notice-line: rgba(88, 101, 242, 0.3);
@@ -44,12 +45,91 @@ html[data-theme='light'] {
   --text-dim: #5c6472;
   --text-faint: #8b93a3;
   --accent-ink: #4a55d8;
+  --on-accent: #ffffff;
   --accent-soft: rgba(88, 101, 242, 0.12);
   --accent-glow: rgba(88, 101, 242, 0.32);
   --notice-line: rgba(88, 101, 242, 0.28);
   --sun: #d15470;
   --sat: #4b7fc4;
   --shadow: 0 8px 24px rgba(20, 24, 40, 0.14);
+}
+
+/* 모던 — 짙은 먹색 + 민트 */
+html[data-theme='modern'] {
+  color-scheme: dark;
+  --bg: #0b0c0e;
+  --bg-elev: #141619;
+  --bg-elev-2: #1d2026;
+  --bg-input: #101216;
+  --line: #2b2f37;
+  --line-soft: #1e2127;
+  --text: #f0f2f5;
+  --text-dim: #99a2af;
+  --text-faint: #626b78;
+  --accent: #14d39a;
+  --accent-ink: #34e0ac;
+  --on-accent: #04231a;
+  --accent-soft: rgba(20, 211, 154, 0.14);
+  --accent-glow: rgba(20, 211, 154, 0.32);
+  --notice-line: rgba(20, 211, 154, 0.3);
+  --danger: #ff6b6b;
+  --warn: #f0b429;
+  --ok: #14d39a;
+  --sun: #ff8095;
+  --sat: #7aa7ff;
+  --shadow: 0 10px 32px rgba(0, 0, 0, 0.6);
+}
+
+/* 흰색 + 검정 */
+html[data-theme='mono'] {
+  color-scheme: light;
+  --bg: #f5f5f6;
+  --bg-elev: #ffffff;
+  --bg-elev-2: #ececee;
+  --bg-input: #ffffff;
+  --line: #dcdce1;
+  --line-soft: #eaeaee;
+  --text: #131316;
+  --text-dim: #55555d;
+  --text-faint: #8b8b94;
+  --accent: #1c1c1f;
+  --accent-ink: #1c1c1f;
+  --on-accent: #ffffff;
+  --accent-soft: #ebebee;
+  --accent-glow: rgba(0, 0, 0, 0.22);
+  --notice-line: #d5d5da;
+  --danger: #cf3348;
+  --warn: #9a6400;
+  --ok: #1f7a52;
+  --sun: #c4405a;
+  --sat: #3f6fb5;
+  --shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+
+/* 흰색 + 노랑 */
+html[data-theme='sunny'] {
+  color-scheme: light;
+  --bg: #fffdf4;
+  --bg-elev: #ffffff;
+  --bg-elev-2: #fdf3d6;
+  --bg-input: #ffffff;
+  --line: #ebdeb5;
+  --line-soft: #f6ecd1;
+  --text: #2a2418;
+  --text-dim: #675c42;
+  --text-faint: #a1977a;
+  --accent: #ffd029;
+  --accent-ink: #8a5a00;
+  --on-accent: #3a2c00;
+  --accent-soft: #fff2c6;
+  --accent-glow: rgba(224, 176, 20, 0.45);
+  --notice-line: #f0dc9a;
+  --danger: #c4384b;
+  --warn: #a76a00;
+  --ok: #2c7a54;
+  --sun: #c8465e;
+  --sat: #4a7fbb;
+  --shadow: 0 8px 24px rgba(120, 92, 0, 0.14);
 }
 
 /* 하양 + 연하늘색 */
@@ -66,6 +146,7 @@ html[data-theme='sky'] {
   --text-faint: #8fb4c9;
   --accent: #2494d0;
   --accent-ink: #0f6d9e;
+  --on-accent: #04202f;
   --accent-soft: #dcf0fb;
   --accent-glow: rgba(36, 148, 208, 0.38);
   --notice-line: #a9d8f2;
@@ -161,8 +242,10 @@ button { cursor: pointer; border: none; background: none; padding: 0; }
   border-radius: 12px;
   color: var(--text-dim);
   flex: none;
-  font-size: 20px;
 }
+
+/* 인라인 SVG 아이콘은 글자 기준선 여백이 생기지 않도록 블록으로 둡니다. */
+button svg, .ico svg, .edit svg { display: block; flex: none; }
 .icon-btn:active { background: var(--bg-elev-2); }
 .icon-btn.active { color: var(--accent-ink); }
 
@@ -200,12 +283,12 @@ main {
   align-items: center;
   justify-content: center;
   gap: 3px;
-  color: var(--text-faint);
+  color: var(--text-dim);
   font-size: 11px;
   font-weight: 600;
 }
 
-.tabbar button .ico { font-size: 20px; line-height: 1; }
+.tabbar button .ico { display: flex; align-items: center; justify-content: center; height: 23px; }
 .tabbar button[aria-selected='true'] { color: var(--accent-ink); }
 
 /* ---------------- 추가 버튼 (FAB) ---------------- */
@@ -219,8 +302,7 @@ main {
   height: 58px;
   border-radius: 50%;
   background: var(--accent);
-  color: #fff;
-  font-size: 30px;
+  color: var(--on-accent);
   line-height: 1;
   display: grid;
   place-items: center;
@@ -291,7 +373,7 @@ main {
 .check[aria-checked='true'] {
   background: var(--accent);
   border-color: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
 }
 .check.dday { border-radius: 8px; border-style: dashed; }
 
@@ -369,7 +451,7 @@ main {
   display: grid; place-items: center;
   font-size: 11px; color: transparent;
 }
-.mini-checks li.on .box { background: var(--accent); border-color: var(--accent); color: #fff; }
+.mini-checks li.on .box { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
 .mini-checks li.on span.txt { text-decoration: line-through; opacity: 0.65; }
 .mini-checks li .txt { flex: 1; min-width: 0; word-break: break-word; text-align: left; }
 
@@ -469,7 +551,7 @@ main {
 .cal-cell.sun .num { color: var(--sun); }
 .cal-cell.sat .num { color: var(--sat); }
 .cal-cell.out .num { opacity: 0.4; }
-.cal-cell.today .num { background: var(--accent); color: #fff; }
+.cal-cell.today .num { background: var(--accent); color: var(--on-accent); }
 .cal-cell.selected { outline: 2px solid var(--accent); outline-offset: -2px; z-index: 1; }
 
 .dots { display: flex; gap: 3px; flex-wrap: wrap; justify-content: center; }
@@ -523,7 +605,7 @@ main {
 .folder-card .edit {
   position: absolute; top: 6px; right: 6px;
   width: 34px; height: 34px; border-radius: 9px;
-  color: var(--text-faint); font-size: 15px;
+  color: var(--text-faint);
   display: grid; place-items: center;
 }
 
@@ -654,7 +736,7 @@ main {
   color: var(--text-dim);
   padding: 0 10px;
 }
-.sheet-head button.primary { color: #fff; background: var(--accent); }
+.sheet-head button.primary { color: var(--on-accent); background: var(--accent); }
 .sheet-head button.primary:disabled { opacity: 0.5; }
 
 .sheet-body {
@@ -716,7 +798,7 @@ select {
   font-weight: 600;
   color: var(--text-dim);
 }
-.seg button[aria-pressed='true'] { background: var(--accent); color: #fff; }
+.seg button[aria-pressed='true'] { background: var(--accent); color: var(--on-accent); }
 
 .switch-row {
   display: flex;
@@ -747,7 +829,7 @@ select {
   transition: transform 0.15s, background 0.15s;
 }
 .switch[aria-checked='true'] { background: var(--accent); border-color: var(--accent); }
-.switch[aria-checked='true']::after { transform: translateX(20px); background: #fff; }
+.switch[aria-checked='true']::after { transform: translateX(20px); background: var(--on-accent); }
 
 /* 체크리스트 편집 */
 .checklist-edit { display: flex; flex-direction: column; gap: 6px; }
@@ -759,7 +841,7 @@ select {
   display: grid; place-items: center;
   font-size: 12px; color: transparent;
 }
-.check-row .box[aria-checked='true'] { background: var(--accent); border-color: var(--accent); color: #fff; }
+.check-row .box[aria-checked='true'] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
 .check-row input { flex: 1; min-height: 40px; padding: 8px 10px; }
 .check-row .del { width: 34px; height: 34px; flex: none; color: var(--text-faint); border-radius: 8px; }
 
@@ -788,7 +870,7 @@ select {
   gap: 8px;
   width: 100%;
 }
-.btn.primary { background: var(--accent); color: #fff; }
+.btn.primary { background: var(--accent); color: var(--on-accent); }
 .btn.danger { background: rgba(224, 85, 97, 0.14); color: var(--danger); }
 .btn:disabled { opacity: 0.55; }
 

@@ -7,12 +7,13 @@ import * as notify from './notify.js';
 import * as lock from './lock.js';
 import { el, $, toast, openSheet, confirmDialog, pickerSheet, openViewer, closeTopSheet, onLongPress } from './ui.js';
 import { openItemEditor, openFolderEditor } from './editor.js';
+import { icon } from './icons.js';
 import {
   WEEKDAYS, todayKey, monthGrid, ddayLabel, formatDate, formatTime,
   relativeDateLabel, diffDays, periodProgress, formatRange, REPEAT_LABELS, bytesToText, debounce,
 } from './util.js';
 
-const APP_VERSION = '1.3.0';
+const APP_VERSION = '1.5.0';
 
 const state = {
   tab: 'today',
@@ -80,20 +81,19 @@ function buildShell() {
       class: 'fab',
       id: 'fab',
       type: 'button',
-      text: '＋',
       'aria-label': '새 항목 추가',
       onclick: () => createItem(),
-    }),
+    }, [icon('plus', { size: 26, strokeWidth: 2.2 })]),
     buildTabbar(),
   );
 }
 
 const TABS = [
-  { id: 'today', label: '오늘', ico: '☀️' },
-  { id: 'calendar', label: '캘린더', ico: '📅' },
-  { id: 'folders', label: '폴더', ico: '📁' },
-  { id: 'dday', label: '디데이', ico: '🎯' },
-  { id: 'settings', label: '설정', ico: '⚙️' },
+  { id: 'today', label: '오늘', ico: 'today' },
+  { id: 'calendar', label: '캘린더', ico: 'calendar' },
+  { id: 'folders', label: '폴더', ico: 'folder' },
+  { id: 'dday', label: '디데이', ico: 'dday' },
+  { id: 'settings', label: '설정', ico: 'settings' },
 ];
 
 function buildTabbar() {
@@ -106,7 +106,7 @@ function buildTabbar() {
       dataset: { tab: t.id },
       onclick: () => go(t.id),
     }, [
-      el('span', { class: 'ico', text: t.ico }),
+      el('span', { class: 'ico' }, [icon(t.ico, { size: 23 })]),
       el('span', { text: t.label }),
     ]));
   });
@@ -179,8 +179,9 @@ function title(text, sub) {
   return el('h1', {}, [text, sub ? el('span', { class: 'sub', text: sub }) : null]);
 }
 
-function iconBtn(ico, label, onclick) {
-  return el('button', { type: 'button', class: 'icon-btn', text: ico, 'aria-label': label, onclick });
+function iconBtn(name, label, onclick) {
+  return el('button', { type: 'button', class: 'icon-btn', 'aria-label': label, onclick },
+    [icon(name, { size: 22 })]);
 }
 
 /* ---------------- 오늘 ---------------- */
@@ -188,7 +189,7 @@ function iconBtn(ico, label, onclick) {
 async function renderToday() {
   const header = [
     title('오늘', formatDate(todayKey(), { withYear: false })),
-    iconBtn('🔍', '검색', openSearch),
+    iconBtn('search', '검색', openSearch),
   ];
 
   const { overdue, today, someday } = await store.todayBuckets();
@@ -268,7 +269,6 @@ async function itemCard(item, folder) {
     role: 'checkbox',
     'aria-checked': String(!!item.done),
     'aria-label': item.done ? '완료 취소' : '완료로 표시',
-    text: '✓',
     onclick: async (e) => {
       e.stopPropagation();
       const before = item.done;
@@ -278,6 +278,8 @@ async function itemCard(item, folder) {
       }
     },
   });
+
+  check.append(icon('check', { size: 15, strokeWidth: 2.6 }));
 
   const body = el('div', { class: 'item-body' });
   body.append(el('p', { class: 'item-title', text: item.title }));
@@ -345,8 +347,8 @@ async function renderCalendar() {
   const { y, m } = state.cal;
   const header = [
     title('캘린더', `${y}년 ${m + 1}월`),
-    iconBtn('🔍', '검색', openSearch),
-    iconBtn('📆', '오늘로', () => {
+    iconBtn('search', '검색', openSearch),
+    iconBtn('jumpToday', '오늘로', () => {
       const n = new Date();
       state.cal = { y: n.getFullYear(), m: n.getMonth() };
       state.selectedDate = todayKey();
@@ -458,9 +460,9 @@ async function renderFolders() {
       : await store.itemsForFolder(state.folderId);
     const name = folder ? `${folder.emoji} ${folder.name}` : '📂 폴더 없음';
     const header = [
-      iconBtn('‹', '뒤로', () => { state.folderId = null; render(); }),
+      iconBtn('back', '뒤로', () => { state.folderId = null; render(); }),
       title(name, `${list.filter((i) => !i.done).length}개 남음 · 전체 ${list.length}개`),
-      folder ? iconBtn('✏️', '폴더 수정', async () => {
+      folder ? iconBtn('edit', '폴더 수정', async () => {
         await openFolderEditor(folder);
         render();
       }) : null,
@@ -473,7 +475,7 @@ async function renderFolders() {
 
   const header = [
     title('폴더', `${folders.length}개`),
-    iconBtn('＋', '폴더 추가', async () => { await openFolderEditor(); render(); }),
+    iconBtn('plus', '폴더 추가', async () => { await openFolderEditor(); render(); }),
   ];
 
   const grid = el('div', { class: 'folder-grid' });
@@ -498,9 +500,9 @@ async function renderFolders() {
       el('span', { class: 'name', text: f.name }),
       el('span', { class: 'stat', text: `할 일 ${c.open}개 · 전체 ${c.total}개` }),
       el('span', {
-        class: 'edit', text: '✏️', role: 'button', 'aria-label': '폴더 수정',
+        class: 'edit', role: 'button', 'aria-label': '폴더 수정',
         onclick: async (e) => { e.stopPropagation(); await openFolderEditor(f); render(); },
-      }),
+      }, [icon('edit', { size: 17 })]),
     ]));
   });
 
@@ -541,7 +543,7 @@ async function renderDday() {
   const list = await store.ddayItems();
   const header = [
     title('디데이', `${list.length}개`),
-    iconBtn('＋', '디데이 추가', () => createItem({ type: 'dday' })),
+    iconBtn('plus', '디데이 추가', () => createItem({ type: 'dday' })),
   ];
   const content = [];
   if (!list.length) {
@@ -824,13 +826,16 @@ async function renderSettings() {
   const viewGroup = group('표시');
   viewGroup.append(settingsRow({
     label: '테마',
-    value: { auto: '기기 설정', dark: '어둡게', light: '밝게', sky: '하양·하늘' }[state.settings.theme],
+    value: THEME_LABELS[state.settings.theme] || '기기 설정',
     onclick: async () => {
       const v = await pickerSheet({
         title: '테마',
         value: state.settings.theme,
         options: [
-          { value: 'sky', label: '하양 · 하늘색', emoji: '🩵', desc: '흰 바탕에 연하늘색 포인트' },
+          { value: 'mono', label: '흰색 · 검정', emoji: '🖤', desc: '흰 바탕에 검정 포인트' },
+          { value: 'sky', label: '흰색 · 하늘', emoji: '🩵', desc: '흰 바탕에 하늘색 포인트' },
+          { value: 'sunny', label: '흰색 · 노랑', emoji: '💛', desc: '흰 바탕에 노랑 포인트' },
+          { value: 'modern', label: '모던', emoji: '🌿', desc: '짙은 먹색 바탕에 민트 포인트' },
           { value: 'light', label: '밝게', emoji: '☀️' },
           { value: 'dark', label: '어둡게', emoji: '🌙' },
           { value: 'auto', label: '기기 설정 따르기', emoji: '⚙️' },
@@ -969,7 +974,20 @@ window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () 
   if (state.settings.theme === 'auto') applyTheme('auto');
 });
 
-const THEME_COLORS = { dark: '#0f1115', light: '#f4f5f8', sky: '#f3faff' };
+const THEME_LABELS = {
+  auto: '기기 설정',
+  dark: '어둡게',
+  light: '밝게',
+  sky: '흰색·하늘',
+  mono: '흰색·검정',
+  sunny: '흰색·노랑',
+  modern: '모던',
+};
+
+const THEME_COLORS = {
+  dark: '#0f1115', light: '#f4f5f8', sky: '#f3faff',
+  modern: '#0b0c0e', mono: '#f5f5f6', sunny: '#fffdf4',
+};
 
 /** 'auto'는 기기 설정을 읽어 실제 테마로 바꿔 줍니다. */
 function resolveTheme(theme) {
