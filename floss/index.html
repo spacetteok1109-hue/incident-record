@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no" />
+  <title>실 자르기 · 색코드</title>
+  <meta name="description" content="사진에서 빨간선으로 표시한 실만 잘라 순서대로 정렬하고, 책자에서 가장 가까운 실 번호를 찾아 줍니다. 색은 그대로 지킵니다." />
+  <meta name="theme-color" content="#0f1115" />
+  <meta name="color-scheme" content="dark light" />
+
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="실자르기" />
+  <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png" />
+
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <link rel="icon" href="./icons/icon-192.png" type="image/png" />
+  <script>
+    // 저장해 둔 테마를 스타일보다 먼저 적용해 첫 화면이 깜빡이지 않게 합니다.
+    // 고른 적이 없으면 아무것도 건드리지 않고 기기(또는 이 페이지를 띄운 쪽) 설정을 따릅니다.
+    try {
+      var t = localStorage.getItem('theme');
+      if (t === 'auto') document.documentElement.removeAttribute('data-theme');
+      else if (t) document.documentElement.setAttribute('data-theme', t);
+    } catch (e) { /* 저장을 막아 둔 브라우저 */ }
+  </script>
+  <link rel="stylesheet" href="./css/style.css" />
+</head>
+<body>
+  <div id="app">
+    <header class="topbar">
+      <h1>실 자르기<span class="sub" id="subtitle">사진을 불러오세요</span></h1>
+      <button id="btn-theme" class="icon-btn" type="button" title="테마 바꾸기" aria-label="테마 바꾸기">🌗</button>
+    </header>
+
+    <main id="view">
+      <!-- ─────────────────────────────── 사진 ─────────────────────────────── -->
+      <section class="pane" data-pane="photo">
+        <div class="card drop" id="drop">
+          <span class="big">🧵</span>
+          <p><b>실 사진을 불러오세요.</b><br />끌어다 놓거나 <kbd>Ctrl</kbd>+<kbd>V</kbd> 로 붙여넣어도 됩니다.</p>
+          <div class="row center wrap">
+            <label class="btn primary">사진 고르기
+              <input type="file" id="file-input" accept="image/*" multiple hidden />
+            </label>
+            <label class="btn">카메라로 찍기
+              <input type="file" id="camera-input" accept="image/*" capture="environment" hidden />
+            </label>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>불러온 사진</h2>
+          <div id="photo-list"></div>
+          <p class="muted small" id="photo-empty">아직 없습니다.</p>
+        </div>
+
+        <div class="card note">
+          <h2>어떻게 쓰나요</h2>
+          <ol class="steps">
+            <li>실 사진에 <b>빨간 선·동그라미</b>로 원하는 실을 표시해 두고 불러옵니다.</li>
+            <li><b>자르기</b> 화면에서 <b>빨간선 찾기</b>를 누르면 표시한 곳만 잡아 냅니다.</li>
+            <li>번호가 사진에 적혀 있으면 <b>번호로 찾기</b>에 <code>310</code> 처럼 적어도 됩니다.</li>
+            <li><b>조각</b> 화면에서 순서를 정하고, 책자를 고르면 가장 가까운 실 번호가 나옵니다.</li>
+            <li><b>내보내기</b>에서 낱장 또는 이어붙인 한 장으로 저장합니다.</li>
+          </ol>
+          <p class="muted small">
+            사진은 이 기기 밖으로 나가지 않습니다. 잘라낸 조각은 원본 픽셀을 그대로 복사해
+            무손실 PNG 로 저장하므로 <b>실 색이 바뀌지 않습니다</b>.
+          </p>
+        </div>
+      </section>
+
+      <!-- ─────────────────────────────── 자르기 ─────────────────────────────── -->
+      <section class="pane" data-pane="cut" hidden>
+        <div id="photo-strip" class="photo-strip" hidden></div>
+
+        <div class="stage-wrap">
+          <canvas id="stage"></canvas>
+          <div class="stage-empty" id="stage-empty">사진을 먼저 불러오세요</div>
+        </div>
+
+        <div class="toolbar">
+          <div class="seg" role="group" aria-label="손가락 조작">
+            <button type="button" data-tool="view" class="on">보기</button>
+            <button type="button" data-tool="draw">그리기</button>
+          </div>
+          <button id="btn-detect" class="btn primary" type="button">빨간선 찾기</button>
+          <button id="btn-fit" class="btn" type="button">전체보기</button>
+          <button id="btn-clear" class="btn danger" type="button">모두 지우기</button>
+        </div>
+        <p class="muted small hint">
+          <b>보기</b>에서는 끌어서 옮기고 두 손가락으로 확대합니다.
+          <b>그리기</b>에서는 끌어서 상자를 새로 만듭니다. 상자를 누르면 모서리를 잡아 크기를 바꿀 수 있습니다.
+        </p>
+
+        <div class="card">
+          <h2>번호·표시로 찾기</h2>
+          <div class="row">
+            <input id="q-code" class="grow" placeholder="예: 310, 3830, blanc" inputmode="text" />
+            <button id="btn-find" class="btn primary" type="button">찾기</button>
+          </div>
+          <p class="muted small" id="find-help">
+            고른 책자에 있는 번호면 그 색으로 바로 찾습니다(인터넷 없이 됩니다).
+            책자에 없으면 사진에 적힌 글자를 읽어 봅니다.
+          </p>
+          <div class="grid2">
+            <label>실이 있는 쪽
+              <select id="f-dir">
+                <option value="auto">알아서</option>
+                <option value="up">번호 위</option>
+                <option value="down">번호 아래</option>
+                <option value="left">번호 왼쪽</option>
+                <option value="right">번호 오른쪽</option>
+                <option value="center">번호 자리</option>
+              </select>
+            </label>
+            <label>잘라낼 크기 <span class="val" id="v-size"></span>
+              <input type="range" id="f-size" min="2" max="14" step="0.5" />
+            </label>
+          </div>
+        </div>
+
+        <details class="card">
+          <summary>빨간선을 어떻게 읽을지 조절하기</summary>
+          <div class="grid2">
+            <label>빨강 민감도 <span class="val" id="v-strength"></span>
+              <input type="range" id="s-strength" min="0.2" max="2.4" step="0.1" />
+            </label>
+            <label>끊긴 선 잇기 <span class="val" id="v-join"></span>
+              <input type="range" id="s-join" min="0" max="0.03" step="0.001" />
+            </label>
+            <label>자르는 기준
+              <select id="s-mode">
+                <option value="auto">알아서 (둘러친 표시는 안쪽, 나머지는 세로로 길게)</option>
+                <option value="column">표시에서 실 쪽으로 사진 끝까지 (세로로 길게)</option>
+                <option value="inside">빨간 테두리 안쪽</option>
+                <option value="band">빨간 줄 옆의 띠</option>
+                <option value="mark">표시 둘레</option>
+              </select>
+            </label>
+            <label>실이 있는 쪽
+              <select id="s-side">
+                <option value="auto">알아서 (색이 있는 쪽)</option>
+                <option value="after">표시 아래 / 오른쪽</option>
+                <option value="before">표시 위 / 왼쪽</option>
+                <option value="both">줄 가운데(띠일 때만)</option>
+              </select>
+            </label>
+            <label>좌우 여유 <span class="val" id="v-width"></span>
+              <input type="range" id="s-width" min="0" max="1.5" step="0.05" />
+            </label>
+            <label>띠 두께 <span class="val" id="v-band"></span>
+              <input type="range" id="s-band" min="0.02" max="0.4" step="0.01" />
+            </label>
+            <label>여백 <span class="val" id="v-pad"></span>
+              <input type="range" id="s-pad" min="0" max="0.4" step="0.01" />
+            </label>
+          </div>
+          <label class="check">
+            <input type="checkbox" id="s-trim" /> 표시와 실 사이의 흰 여백 걷어 내기
+          </label>
+          <p class="muted small">
+            색상표 사진처럼 <b>번호 밑에 실타래가 길게 늘어진</b> 사진에서는 표시한 자리부터
+            사진 끝까지 세로로 잘라야 실이 다 담깁니다. 그게 기본 동작이고,
+            <b>좌우 여유</b>로 타래 폭에 맞춰 넓히거나 좁힐 수 있습니다.
+            실 끝이 잘리지 않도록 <b>바깥쪽 끝은 깎지 않습니다.</b>
+          </p>
+          <label class="check">
+            <input type="checkbox" id="s-solid" /> 빨간 실은 표시로 보지 않기
+          </label>
+          <p class="muted small">
+            빨간 실이 사진에 함께 있으면 표시로 잘못 잡힐 수 있습니다. 위 항목을 켜 두면
+            <b>가는 선</b>만 표시로 봅니다. 굵은 붓으로 그은 표시가 무시된다면 꺼 주세요.
+          </p>
+          <p class="muted small">
+            민감도를 낮추면 옅은 빨강까지 잡고, 높이면 진한 빨강만 잡습니다.
+            테두리 안쪽으로 자르면 빨간 선이 조각에 섞이지 않습니다.
+          </p>
+        </details>
+      </section>
+
+      <!-- ─────────────────────────────── 조각 ─────────────────────────────── -->
+      <section class="pane" data-pane="list" hidden>
+        <div class="card">
+          <div class="row">
+            <label class="grow">정렬 순서
+              <select id="sort-mode"></select>
+            </label>
+          </div>
+          <div class="row">
+            <label class="grow">책자(색상표)
+              <select id="palette-sel"></select>
+            </label>
+          </div>
+          <div class="row wrap">
+            <button id="btn-analyze" class="btn primary" type="button">색코드 뽑기</button>
+            <label class="btn">색상표 넣기
+              <input type="file" id="palette-file" accept=".csv,.json,.txt,text/csv,application/json" hidden />
+            </label>
+            <button id="btn-palette-del" class="btn danger" type="button">색상표 지우기</button>
+            <span class="grow"></span>
+            <span class="muted small" id="piece-count">아직 없음</span>
+          </div>
+          <p class="muted small">
+            색상표 파일은 <code>번호,이름,#RRGGBB</code> 로 된 CSV 나 JSON 이면 됩니다.
+            뽑은 색코드는 <b>알려만 주고 사진은 고치지 않습니다.</b>
+          </p>
+        </div>
+        <div id="piece-list" class="pieces"></div>
+      </section>
+
+
+      <!-- ─────────────────────────────── 책자 ─────────────────────────────── -->
+      <section class="pane" data-pane="book" hidden>
+        <div class="card">
+          <h2>번호로 실 찾기</h2>
+          <div class="row">
+            <input id="book-q" class="grow" placeholder="예: 1432" inputmode="text" />
+            <button id="book-find" class="btn primary" type="button">찾기</button>
+          </div>
+          <div id="book-result"></div>
+        </div>
+
+        <div class="card">
+          <h2>책자 고르기</h2>
+          <div class="row">
+            <select id="book-sel" class="grow"></select>
+          </div>
+          <div class="row wrap">
+            <button id="book-new" class="btn" type="button">새 책자 만들기</button>
+            <label class="btn">색상표 파일 넣기
+              <input type="file" id="book-file" accept=".csv,.json,.txt,text/csv,application/json" hidden />
+            </label>
+            <button id="book-csv" class="btn" type="button">CSV 로 내보내기</button>
+            <button id="book-del" class="btn danger" type="button">책자 지우기</button>
+          </div>
+          <p class="muted small" id="book-info">—</p>
+        </div>
+
+        <div class="card">
+          <h2>이 사진으로 책자 채우기</h2>
+          <p class="muted small">
+            번호 한 줄 아래로 실타래가 늘어진 카드 사진이면, 타래를 전부 찾아
+            번호와 짝지어 책자에 넣습니다. 한 장씩 넣을 때마다 색이 쌓입니다.
+          </p>
+          <div class="row wrap">
+            <button id="book-scan" class="btn primary" type="button">타래 찾기</button>
+            <button id="book-add" class="btn" type="button" disabled>책자에 넣기</button>
+            <span class="grow"></span>
+            <span class="muted small" id="book-scan-info">아직 찾지 않음</span>
+          </div>
+          <label class="grow">번호 한 번에 붙여넣기 (왼쪽부터 차례로)
+            <textarea id="book-codes" rows="2" placeholder="167 1811 1790 1809 1033 …"></textarea>
+          </label>
+          <div id="book-hanks" class="hanks"></div>
+        </div>
+
+        <div class="card">
+          <h2>책자 안의 색</h2>
+          <div class="row">
+            <input id="book-filter" class="grow" placeholder="번호로 걸러 보기" />
+          </div>
+          <div id="book-colors" class="swatches"></div>
+        </div>
+      </section>
+
+      <!-- ─────────────────────────────── 내보내기 ─────────────────────────────── -->
+      <section class="pane" data-pane="out" hidden>
+        <div class="card">
+          <div class="row wrap">
+            <button id="btn-save-sheet" class="btn primary" type="button">이어붙여 한 장 저장</button>
+            <button id="btn-save-all" class="btn" type="button">조각 낱장 저장</button>
+            <span class="grow"></span>
+            <span class="muted small" id="out-count">조각 없음</span>
+          </div>
+          <div class="grid2">
+            <label>배치
+              <select id="o-layout">
+                <option value="row">가로 한 줄</option>
+                <option value="column">세로 한 줄</option>
+                <option value="grid">격자</option>
+              </select>
+            </label>
+            <label>격자 열 수
+              <input type="number" id="o-columns" min="1" max="12" step="1" />
+            </label>
+            <label>사이 간격 <span class="val" id="v-gap"></span>
+              <input type="range" id="o-gap" min="0" max="60" step="2" />
+            </label>
+            <label>바탕
+              <select id="o-bg">
+                <option value="#ffffff">흰색</option>
+                <option value="#000000">검정</option>
+                <option value="#f2f2f2">밝은 회색</option>
+                <option value="transparent">투명</option>
+              </select>
+            </label>
+            <label>글자 넣기
+              <select id="o-label">
+                <option value="both">내 번호 + 추천 코드</option>
+                <option value="name">내가 적은 번호만</option>
+                <option value="code">추천 색코드만</option>
+                <option value="order">순서 번호만</option>
+                <option value="none">넣지 않기</option>
+              </select>
+            </label>
+          </div>
+          <p class="muted small">
+            조각은 크기를 바꾸지 않고 그대로 붙입니다. 글자는 조각 <b>바깥쪽</b>에만 그려서
+            실 픽셀은 건드리지 않습니다.
+          </p>
+        </div>
+
+        <div class="card">
+          <h2>미리보기</h2>
+          <div id="sheet-preview" class="sheet-preview"></div>
+        </div>
+
+        <div class="card">
+          <h2>색코드 목록</h2>
+          <div class="row wrap">
+            <button id="btn-copy-text" class="btn" type="button">글로 복사</button>
+            <button id="btn-copy-csv" class="btn" type="button">CSV 로 복사</button>
+            <button id="btn-save-csv" class="btn" type="button">CSV 파일로 저장</button>
+          </div>
+          <p class="muted small">ΔE 는 색 차이입니다. 2 아래면 눈으로 거의 구분되지 않습니다.</p>
+        </div>
+
+        <div class="card">
+          <h2>설정</h2>
+          <label class="check"><input type="checkbox" id="opt-remember" /> 이 기기에 작업 내용 기억하기</label>
+          <div class="row"><button id="btn-reset" class="btn danger" type="button">처음 상태로 되돌리기</button></div>
+          <p class="muted small">
+            기억하기를 켜면 사진과 상자가 이 브라우저 안에만 저장되어, 창을 닫았다 열어도 이어서 할 수 있습니다.
+          </p>
+        </div>
+      </section>
+    </main>
+
+    <nav class="tabbar">
+      <button type="button" data-tab="photo" class="on"><span>🖼️</span>사진</button>
+      <button type="button" data-tab="cut"><span>✂️</span>자르기</button>
+      <button type="button" data-tab="list"><span>🧵</span>조각</button>
+      <button type="button" data-tab="book"><span>📕</span>책자</button>
+      <button type="button" data-tab="out"><span>💾</span>내보내기</button>
+    </nav>
+  </div>
+
+  <noscript>
+    <div style="padding:24px;text-align:center">이 앱을 쓰려면 자바스크립트를 켜 주세요.</div>
+  </noscript>
+
+  <script type="module" src="./js/app.js"></script>
+</body>
+</html>
