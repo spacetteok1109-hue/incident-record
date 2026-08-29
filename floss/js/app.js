@@ -14,7 +14,7 @@ import {
 import { representativeColor, medianAround } from './sample.js';
 import {
   loadPalette, loadCustomList, saveCustomList, parsePaletteText, match, findByCode,
-  createCustom, upsertColors, toCsv,
+  createCustom, upsertColors, toCsv, BUILTIN,
 } from './palette.js';
 import { findHanks } from './card.js';
 import { rgbToHex, readableInk, deltaEWord } from './color.js';
@@ -774,6 +774,13 @@ function renderPieces() {
           }),
         ]) : el('p', { class: 'muted small', text: '“색코드 뽑기”를 누르면 색을 읽습니다.' }),
         chips.length ? el('div', { class: 'chips' }, chips) : null,
+        box.matches && box.matches[0]
+          ? el('p', { class: 'muted small' }, [
+            '가장 가까운 색 ',
+            el('b', { text: box.matches[0].code }),
+            ` · ${box.matches[0].hex} · ΔE ${box.matches[0].de.toFixed(1)} (${deltaEWord(box.matches[0].de)})`,
+          ])
+          : null,
         box.matches && box.matches[0] && box.matches[0].de > 6
           ? el('p', {
             class: 'muted small',
@@ -843,17 +850,7 @@ function startEyedrop(pc) {
 /* ------------------------------------------------------------------ 책자 */
 
 function renderBookSelect() {
-  const sel = $('#book-sel');
-  sel.textContent = '';
-  sel.append(el('option', { value: 'dmc', text: 'DMC (25번 자수실) · 454색' }));
-  for (const p of loadCustomList()) {
-    sel.append(el('option', { value: p.id, text: `${p.name} · ${p.colors.length}색` }));
-  }
-  sel.value = state.paletteId;
-  if (sel.value !== state.paletteId) {
-    state.paletteId = 'dmc';
-    sel.value = 'dmc';
-  }
+  fillPaletteOptions($('#book-sel'));
   renderPaletteSelect();
 }
 
@@ -862,8 +859,9 @@ async function renderBook() {
   const palette = await ensurePalette();
   const info = $('#book-info');
   if (!palette) { info.textContent = '색상표를 불러오지 못했습니다.'; return; }
-  info.textContent = state.paletteId === 'dmc'
-    ? 'DMC 는 기본으로 들어 있는 책자입니다. 지울 수 없습니다.'
+  const builtin = BUILTIN.find((b) => b.id === state.paletteId);
+  info.textContent = builtin
+    ? `${palette.name} · ${palette.colors.length}색. 앱에 처음부터 들어 있는 책자라 지울 수 없습니다.${builtin.id === 'ginkgo' ? ' 카드 사진에서 읽어 낸 값이라 실물과 조금 다를 수 있습니다.' : ''}`
     : `${palette.name} · ${palette.colors.length}색. 이 브라우저 안에만 저장됩니다. CSV 로 내보내 두면 안전합니다.`;
   renderBookColors();
 }
@@ -885,6 +883,7 @@ function renderBookColors() {
     wrap.append(el('div', { class: 'swatch-cell', title: `${c.code} ${c.name || ''} ${c.hex}` }, [
       el('div', { class: 'fill', style: { background: c.hex } }),
       el('b', { text: c.code }),
+      el('small', { text: c.hex }),
     ]));
   }
 }
@@ -1017,8 +1016,8 @@ function applyPastedCodes() {
 
 async function addScanToBook() {
   if (!state.scan) return;
-  if (state.paletteId === 'dmc') {
-    toast('DMC 에는 넣을 수 없습니다. 새 책자를 만들어 주세요.', 'bad');
+  if (BUILTIN.some((b) => b.id === state.paletteId)) {
+    toast('처음부터 들어 있는 책자에는 넣을 수 없습니다. 새 책자를 만들어 주세요.', 'bad');
     return;
   }
   const colors = state.scan.items
@@ -1168,18 +1167,21 @@ function tableToText() {
 
 /* ------------------------------------------------------------- 책자(색상표) */
 
-function renderPaletteSelect() {
-  const sel = $('#palette-sel');
+function fillPaletteOptions(sel) {
   sel.textContent = '';
-  sel.append(el('option', { value: 'dmc', text: 'DMC (25번 자수실) · 454색' }));
+  for (const b of BUILTIN) sel.append(el('option', { value: b.id, text: `${b.name} · ${b.count}색` }));
   for (const p of loadCustomList()) {
     sel.append(el('option', { value: p.id, text: `${p.name} · ${p.colors.length}색` }));
   }
   sel.value = state.paletteId;
   if (sel.value !== state.paletteId) {
-    state.paletteId = 'dmc';
-    sel.value = 'dmc';
+    state.paletteId = BUILTIN[0].id;
+    sel.value = state.paletteId;
   }
+}
+
+function renderPaletteSelect() {
+  fillPaletteOptions($('#palette-sel'));
 }
 
 async function addPalette(file) {
@@ -1394,7 +1396,7 @@ function bindControls() {
   });
   $('#btn-analyze').addEventListener('click', () => analyzeColors());
   $('#btn-palette-del').addEventListener('click', async () => {
-    if (state.paletteId === 'dmc') { toast('DMC 색상표는 지울 수 없습니다.'); return; }
+    if (BUILTIN.some((b) => b.id === state.paletteId)) { toast('처음부터 들어 있는 책자는 지울 수 없습니다.'); return; }
     if (!await confirmSheet('이 색상표를 지울까요?', null, '지우기')) return;
     saveCustomList(loadCustomList().filter((p) => p.id !== state.paletteId));
     state.paletteId = 'dmc';
@@ -1456,7 +1458,7 @@ function bindControls() {
     if (await saveFile(blob, `${safeName(palette.name) || '책자'}.csv`) === 'failed') toast('저장하지 못했습니다.', 'bad');
   });
   $('#book-del').addEventListener('click', async () => {
-    if (state.paletteId === 'dmc') { toast('DMC 책자는 지울 수 없습니다.'); return; }
+    if (BUILTIN.some((b) => b.id === state.paletteId)) { toast('처음부터 들어 있는 책자는 지울 수 없습니다.'); return; }
     if (!await confirmSheet('이 책자를 지울까요?', '넣어 둔 색이 모두 사라집니다.', '지우기')) return;
     saveCustomList(loadCustomList().filter((p) => p.id !== state.paletteId));
     state.paletteId = 'dmc';

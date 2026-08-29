@@ -76,12 +76,13 @@ ${stripped}
 const html = read('index.html');
 const css = read('css/style.css');
 const dmc = JSON.parse(read('data/dmc.json'));
+const ginkgo = JSON.parse(read('data/ginkgo.json'));
 
 const script = `<script type="module">
 /* 실 자르기 · 색코드 — 한 파일짜리 판.
    floss/ 폴더의 원본에서 build-standalone.mjs 로 만들어 냅니다. 여기서 직접 고치지 마세요. */
 globalThis.__FLOSS_STANDALONE__ = true;
-globalThis.__FLOSS_DATA__ = { dmc: ${JSON.stringify(dmc)} };
+globalThis.__FLOSS_DATA__ = { dmc: ${JSON.stringify(dmc)}, ginkgo: ${JSON.stringify(ginkgo)} };
 const __m = {};
 ${chunks.join('\n\n')}
 </script>`;
@@ -101,7 +102,7 @@ if (out.includes('./js/') || out.includes('./css/')) {
 
 writeFileSync(join(ROOT, 'standalone.html'), out);
 const kb = (Buffer.byteLength(out) / 1024).toFixed(0);
-console.log(`standalone.html 을 만들었습니다 · ${kb} KB · 색 ${dmc.colors.length}개 포함`);
+console.log(`standalone.html 을 만들었습니다 · ${kb} KB · 색 ${dmc.colors.length + ginkgo.colors.length}개 포함`);
 
 // --artifact <경로> 를 주면 문서 뼈대(<html>·<head>·<body>)를 뺀 판도 만듭니다.
 // 페이지 뼈대를 대신 씌워 주는 곳에 올릴 때 씁니다.

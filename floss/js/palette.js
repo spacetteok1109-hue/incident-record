@@ -6,6 +6,12 @@ import {
 
 const CUSTOM_KEY = 'floss.palettes.v1';
 
+/** 앱에 처음부터 들어 있는 책자들 */
+export const BUILTIN = [
+  { id: 'dmc', name: 'DMC (25번 자수실)', count: 454 },
+  { id: 'ginkgo', name: '은행나무 (银杏)', count: 775 },
+];
+
 /** 색 목록에 Lab 값을 미리 계산해 붙여 둡니다(비교를 빠르게 하려고). */
 function prepare(palette) {
   const colors = palette.colors

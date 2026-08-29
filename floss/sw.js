@@ -1,6 +1,6 @@
 /* sw.js — 한 번 열어 두면 인터넷 없이도 그대로 쓰도록 파일을 챙겨 둡니다. */
 
-const CACHE = 'floss-cutter-v1';
+const CACHE = 'floss-cutter-v2';
 const ASSETS = [
   './',
   './index.html',
@@ -15,7 +15,9 @@ const ASSETS = [
   './js/sample.js',
   './js/palette.js',
   './js/ocr.js',
+  './js/card.js',
   './data/dmc.json',
+  './data/ginkgo.json',
   './icons/icon-192.png',
   './icons/icon-512.png',
   './icons/icon-maskable-512.png',

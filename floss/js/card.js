@@ -121,6 +121,64 @@ export function refineGrid(fit, candidates, tolerance) {
   return { ...fit, period, anchor };
 }
 
+/**
+ * 격자 간격과 위치를 실제 실 색에 맞춰 다듬습니다.
+ *
+ * 번호 칸의 가는 선 대신 숫자 획이 잡히면 격자가 타래 한가운데에 서게 되고,
+ * 그러면 칸 하나에 옆 타래 절반씩 담겨 색이 섞입니다. 제자리에 선 격자는
+ * 칸 안의 색이 고르고 칸 경계에서 색이 확 바뀌므로, 그 두 가지가 가장
+ * 잘 맞는 간격·위치를 찾습니다.
+ *
+ * @param columns 열마다 미리 구해 둔 Lab 평균 (없는 열은 null)
+ */
+export function refineFit(columns, period, anchor, width) {
+  const measure = (per, phase) => {
+    const inset = Math.max(1, Math.round(per * 0.22));
+    let within = 0;
+    let jump = 0;
+    let cells = 0;
+    let edges = 0;
+    const first = phase - Math.floor(phase / per) * per;
+    for (let x = first; x + per <= width; x += per) {
+      const a = Math.ceil(x) + inset;
+      const b = Math.floor(x + per) - inset;
+      if (b - a < 3) continue;
+      let L = 0; let A = 0; let B = 0; let n = 0;
+      for (let i = a; i < b; i += 1) {
+        const v = columns[i];
+        if (v) { L += v[0]; A += v[1]; B += v[2]; n += 1; }
+      }
+      if (n < 3) continue;
+      L /= n; A /= n; B /= n;
+      let variance = 0;
+      for (let i = a; i < b; i += 1) {
+        const v = columns[i];
+        if (v) variance += (v[0] - L) ** 2 + (v[1] - A) ** 2 + (v[2] - B) ** 2;
+      }
+      within += variance / n;
+      cells += 1;
+      // 칸 경계에서는 색이 확 바뀌어야 제자리입니다.
+      const left = columns[Math.round(x) - inset];
+      const right = columns[Math.round(x) + inset];
+      if (left && right) {
+        jump += Math.hypot(left[0] - right[0], left[1] - right[1], left[2] - right[2]);
+        edges += 1;
+      }
+    }
+    if (cells < 3 || !edges) return Infinity;
+    return (within / cells) / (1 + jump / edges);
+  };
+
+  let best = { period, anchor, value: Infinity };
+  for (let per = period * 0.94; per <= period * 1.06; per += 0.2) {
+    for (let step = 0; step < per; step += 1) {
+      const value = measure(per, anchor + step);
+      if (value < best.value) best = { period: per, anchor: anchor + step, value };
+    }
+  }
+  return Number.isFinite(best.value) ? best : { period, anchor };
+}
+
 /** 격자를 사진 폭 전체로 늘려 칸 경계 목록을 만듭니다. */
 function gridLines(fit, width) {
   const out = [];
@@ -148,16 +206,42 @@ export function findHanks(img, opt = {}) {
   for (let y = 0; y < h; y += 1) {
     let hit = 0;
     let n = 0;
-    for (let x = 0; x < w; x += step) {
+    for (let x = 0; x < w - step; x += step) {
       const p = (y * w + x) * 4;
-      if (!isPaper(data[p], data[p + 1], data[p + 2], minChroma, minLum)) hit += 1;
+      const q = (y * w + x + step) * 4;
+      const paper = isPaper(data[p], data[p + 1], data[p + 2], minChroma, minLum);
+      // 흰·회색 실은 종이와 색이 비슷합니다. 대신 가닥 그늘 때문에 옆 픽셀과
+      // 밝기가 톡톡 튀므로, 그 결을 함께 봐서 실이 깔린 줄을 찾습니다.
+      const grain = Math.abs(
+        luminance(data[p], data[p + 1], data[p + 2]) - luminance(data[q], data[q + 1], data[q + 2]),
+      ) > (opt.grain ?? 7);
+      if (!paper || grain) hit += 1;
       n += 1;
     }
     rowFill[y] = n ? hit / n : 0;
   }
-  const bands = runs(rowFill, opt.rowFill ?? 0.55, Math.round(h * 0.06));
-  if (!bands.length) return empty;
-  const band = bands.reduce((a, b) => ((b.to - b.from) > (a.to - a.from) ? b : a));
+  const found = runs(rowFill, opt.rowFill ?? 0.55, Math.round(h * (opt.minBand ?? 0.06)));
+  if (!found.length) return empty;
+  // 한 장에 실 띠가 여러 줄 들어 있는 카드도 있습니다. 위에서 아래로 차례로 봅니다.
+  const bands = opt.allBands === false
+    ? [found.reduce((a, b) => ((b.to - b.from) > (a.to - a.from) ? b : a))]
+    : found;
+
+  const all = [];
+  let lastPeriod = null;
+  for (const band of bands) {
+    const got = bandHanks(img, band, opt);
+    if (got.period) lastPeriod = got.period;
+    all.push(...got.hanks.map((hk) => ({ ...hk, band: bands.indexOf(band) })));
+  }
+  return { hanks: all, band: bands[0], bands, period: lastPeriod };
+}
+
+/** 띠 하나 안에서 타래를 나눕니다. */
+function bandHanks(img, band, opt) {
+  const { data, width: w, height: h } = img;
+  const minChroma = opt.minChroma ?? 18;
+  const minLum = opt.minLum ?? 150;
   const dense = Math.min(band.to, band.from + Math.max(30, Math.round((band.to - band.from) * 0.45)));
 
   /* 2) 번호 칸의 세로선 찾기.
@@ -235,7 +319,10 @@ export function findHanks(img, opt = {}) {
     const alt = fitGrid(hueCandidates, w, minPeriod, maxPeriod);
     if (alt && (!fit || alt.f1 > fit.f1)) { fit = alt; from = hueCandidates; }
   }
-  if (fit) fit = refineGrid(fit, from, tolerance);
+  if (fit) {
+    fit = refineGrid(fit, from, tolerance);
+    fit = { ...fit, ...refineFit(smooth, fit.period, fit.anchor, w) };
+  }
 
   let edges;
   if (fit) {
@@ -247,10 +334,53 @@ export function findHanks(img, opt = {}) {
   edges = edges.filter((x, i, a) => x > -2 && x < w + 2 && (i === 0 || x - a[i - 1] > 4));
 
   /* 5) 칸마다 타래 상자 만들기. 실이 거의 없는 칸은 버립니다. */
-  const bottom = opt.bottom === 'band'
-    ? Math.min(h, band.to + Math.round((band.to - band.from) * 0.2))
-    : h;
-  const hanks = [];
+  // 번호칸이 아예 없으면 카드가 아니라 배경입니다.
+  if (headerTo - headerFrom <= 16) return { hanks: [], period: null };
+  {
+    let paper = 0;
+    let n = 0;
+    for (let y = headerFrom; y < headerTo; y += 2) {
+      for (let x = 0; x < w; x += 4) {
+        const p = (y * w + x) * 4;
+        if (isPaper(data[p], data[p + 1], data[p + 2], 40, 140)) paper += 1;
+        n += 1;
+      }
+    }
+    if (n && paper / n < 0.3) return { hanks: [], period: null };
+  }
+
+  // 칸 위쪽이 번호가 적힌 흰 종이인지 봅니다. 카드 밖(배경)에는 종이가 없습니다.
+  const headerPaper = (x0, x1) => {
+    if (headerTo - headerFrom <= 8) return 1;
+    let hit = 0;
+    let n = 0;
+    for (let y = headerFrom; y < headerTo; y += 2) {
+      for (let x = Math.max(0, x0); x < Math.min(w, x1); x += 2) {
+        const p = (y * w + x) * 4;
+        if (isPaper(data[p], data[p + 1], data[p + 2], 40, 140)) hit += 1;
+        n += 1;
+      }
+    }
+    return n ? hit / n : 0;
+  };
+
+  // 그 칸 위에 번호가 실제로 찍혀 있는지 (여백 칸에는 글자가 없습니다)
+  const headerInk = (x0, x1) => {
+    let ink = 0;
+    let n = 0;
+    for (let y = headerFrom; y < headerTo; y += 1) {
+      for (let x = Math.max(0, x0); x < Math.min(w, x1); x += 1) {
+        const p = (y * w + x) * 4;
+        if (luminance(data[p], data[p + 1], data[p + 2]) < 110) ink += 1;
+        n += 1;
+      }
+    }
+    return n ? ink / n : 0;
+  };
+
+  const bandBottom = Math.min(h, band.to + Math.round((band.to - band.from) * 0.2));
+  const bottom = opt.bottom === 'band' ? bandBottom : h;
+  const cells = [];
   for (let i = 0; i < edges.length - 1; i += 1) {
     const x0 = Math.max(0, edges[i]);
     const x1 = Math.min(w, edges[i + 1]);
@@ -264,11 +394,103 @@ export function findHanks(img, opt = {}) {
         n += 1;
       }
     }
-    const filled = n ? hit / n : 0;
-    if (filled < 0.5) continue;
-    hanks.push({
-      x: x0 + 1, y: band.from, w: x1 - x0 - 2, h: Math.max(4, bottom - band.from), filled,
+    cells.push({
+      index: i,
+      x: x0 + 1,
+      y: band.from,
+      w: x1 - x0 - 2,
+      h: Math.max(4, bottom - band.from),
+      filled: n ? hit / n : 0,
+      paper: headerPaper(x0, x1),
+      ink: headerInk(x0, x1),
     });
   }
-  return { hanks, band, period: fit ? Math.round(fit.period) : null };
+
+  // 실이 실제로 깔려 있는 가로 구간. 흰 실도 놓치지 않도록 얼룩덜룩함까지 함께 봅니다.
+  const threadCol = new Float32Array(w);
+  for (let x = 0; x < w; x += 1) {
+    let hit = 0;
+    let n = 0;
+    let sum = 0;
+    let sumSq = 0;
+    for (let y = band.from; y < dense; y += 2) {
+      const p = (y * w + x) * 4;
+      if (!isPaper(data[p], data[p + 1], data[p + 2], minChroma, minLum)) hit += 1;
+      const l = luminance(data[p], data[p + 1], data[p + 2]);
+      sum += l; sumSq += l * l; n += 1;
+    }
+    if (!n) continue;
+    const rough = Math.sqrt(Math.max(0, sumSq / n - (sum / n) ** 2));
+    threadCol[x] = (hit / n >= 0.35 || rough >= (opt.rough ?? 10)) ? 1 : 0;
+  }
+  const threadRuns = runs(threadCol, 1, Math.max(4, Math.round(w * 0.01)));
+  const threadSpan = threadRuns.length
+    ? threadRuns.reduce((a, b) => ((b.to - b.from) > (a.to - a.from) ? b : a))
+    : null;
+
+  // 칸 수를 알려 준 경우: 실이 깔린 구간과 가장 잘 겹치는 자리로 그만큼 잘라 씁니다.
+  const want = Number(opt.cells) || 0;
+
+  // 격자를 못 찾았거나 칸이 모자라면, 실이 깔린 구간을 그냥 칸 수만큼 똑같이 나눕니다.
+  if (want >= 2 && cells.length < want && threadSpan) {
+    const width = (threadSpan.to - threadSpan.from) / want;
+    if (width >= 6) {
+      const made = [];
+      for (let i = 0; i < want; i += 1) {
+        const x0 = Math.round(threadSpan.from + i * width);
+        const x1 = Math.round(threadSpan.from + (i + 1) * width);
+        made.push({
+          index: i,
+          x: x0 + 1,
+          y: band.from,
+          w: Math.max(2, x1 - x0 - 2),
+          h: Math.max(4, bottom - band.from),
+          filled: 1,
+          paper: 1,
+          ink: 0,
+          evenly: true,
+        });
+      }
+      return { hanks: made, period: Math.round(width) };
+    }
+  }
+
+  if (want >= 2 && cells.length >= want) {
+    let best = null;
+    // 카드 위에 있어야 한다는 조건을 조금씩 풀면서, 되는 선에서 가장 좋은 자리를 찾습니다.
+    for (const minPaper of [0.5, 0.3, 0]) {
+      for (let i = 0; i + want <= cells.length; i += 1) {
+        const window = cells.slice(i, i + want);
+        if (window[want - 1].index - window[0].index !== want - 1) continue;
+        if (window.some((c) => c.paper < minPaper)) continue;
+        const w0 = window[0].x;
+        const w1 = window[want - 1].x + window[want - 1].w;
+        let score = window.reduce((a, c) => a + c.ink, 0);
+        if (threadSpan) {
+          const overlap = Math.max(0, Math.min(w1, threadSpan.to) - Math.max(w0, threadSpan.from));
+          const spread = Math.max(w1, threadSpan.to) - Math.min(w0, threadSpan.from);
+          score = (overlap / Math.max(1, spread)) * 10 + score;
+        }
+        if (!best || score > best.score) best = { score, window };
+      }
+      if (best) break;
+    }
+    if (best) return { hanks: best.window, period: fit ? Math.round(fit.period) : null };
+  }
+
+  const hanks = cells.filter((c) => c.paper >= 0.45 && (c.filled >= 0.35 || c.ink >= 0.02));
+  if (hanks.length > 2) {
+    // 띄엄띄엄 떨어진 헛 칸은 버리고, 죽 이어진 무리만 남깁니다.
+    let best = { at: 0, len: 1 };
+    let at = 0;
+    for (let k = 1; k <= hanks.length; k += 1) {
+      const linked = k < hanks.length && hanks[k].index === hanks[k - 1].index + 1;
+      if (!linked) {
+        if (k - at > best.len) best = { at, len: k - at };
+        at = k;
+      }
+    }
+    return { hanks: hanks.slice(best.at, best.at + best.len), period: fit ? Math.round(fit.period) : null };
+  }
+  return { hanks, period: fit ? Math.round(fit.period) : null };
 }
