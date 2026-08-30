@@ -27,6 +27,12 @@ function emit() {
   });
 }
 
+/** 가계부처럼 다른 모듈이 바뀌었을 때 화면을 다시 그리게 합니다. */
+export function notifyChanged() {
+  invalidate();
+  emit();
+}
+
 export function invalidate() {
   cache.folders = null;
   cache.items = null;
@@ -388,8 +394,8 @@ export async function rollForwardRepeats() {
 
 /** 백업용 JSON (사진은 base64로 포함) */
 export async function exportBackup(includePhotos = true) {
-  const [folders, items, photos] = await Promise.all([
-    db.getAll('folders'), db.getAll('items'), db.getAll('photos'),
+  const [folders, items, photos, expenses] = await Promise.all([
+    db.getAll('folders'), db.getAll('items'), db.getAll('photos'), db.getAll('expenses'),
   ]);
   const outPhotos = [];
   if (includePhotos) {
@@ -408,6 +414,7 @@ export async function exportBackup(includePhotos = true) {
     exportedAt: new Date().toISOString(),
     folders,
     items,
+    expenses,
     photos: outPhotos,
   };
 }
@@ -415,10 +422,14 @@ export async function exportBackup(includePhotos = true) {
 export async function importBackup(data, mode = 'merge') {
   if (!data || data.app !== 'todo-cal') throw new Error('이 앱의 백업 파일이 아닙니다.');
   if (mode === 'replace') {
-    await Promise.all([db.clearStore('folders'), db.clearStore('items'), db.clearStore('photos')]);
+    await Promise.all([
+      db.clearStore('folders'), db.clearStore('items'),
+      db.clearStore('photos'), db.clearStore('expenses'),
+    ]);
   }
   if (Array.isArray(data.folders) && data.folders.length) await db.putAll('folders', data.folders);
   if (Array.isArray(data.items) && data.items.length) await db.putAll('items', data.items);
+  if (Array.isArray(data.expenses) && data.expenses.length) await db.putAll('expenses', data.expenses);
   if (Array.isArray(data.photos) && data.photos.length) {
     const rows = [];
     for (const p of data.photos) {
@@ -436,6 +447,7 @@ export async function importBackup(data, mode = 'merge') {
   return {
     folders: (data.folders || []).length,
     items: (data.items || []).length,
+    expenses: (data.expenses || []).length,
     photos: (data.photos || []).length,
   };
 }
@@ -457,7 +469,7 @@ export async function dataURLToBlob(url) {
 export async function wipeAll() {
   await Promise.all([
     db.clearStore('folders'), db.clearStore('items'),
-    db.clearStore('photos'), db.clearStore('meta'),
+    db.clearStore('photos'), db.clearStore('meta'), db.clearStore('expenses'),
   ]);
   invalidate();
   emit();

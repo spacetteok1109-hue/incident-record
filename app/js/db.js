@@ -6,7 +6,7 @@
  */
 
 const DB_NAME = 'todo-cal';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 let dbPromise = null;
 
@@ -33,6 +33,13 @@ export function openDB() {
       }
       if (!db.objectStoreNames.contains('meta')) {
         db.createObjectStore('meta', { keyPath: 'key' });
+      }
+      // v2: 가계부
+      if (!db.objectStoreNames.contains('expenses')) {
+        const s = db.createObjectStore('expenses', { keyPath: 'id' });
+        s.createIndex('date', 'date');
+        s.createIndex('method', 'method');
+        s.createIndex('category', 'category');
       }
       void e;
     };
