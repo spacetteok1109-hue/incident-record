@@ -14,10 +14,10 @@ import {
   relativeDateLabel, diffDays, periodProgress, formatRange, REPEAT_LABELS, bytesToText, debounce,
 } from './util.js';
 
-const APP_VERSION = '1.6.0';
+const APP_VERSION = '2.0.0';
 
 const state = {
-  tab: 'today',
+  tab: 'calendar',
   cal: { y: new Date().getFullYear(), m: new Date().getMonth() },
   moneyMonth: money.thisMonthKey(),
   selectedDate: todayKey(),
@@ -36,6 +36,7 @@ async function boot() {
   await store.ensureSeed();
   state.settings = { ...state.settings, ...(await db.getMeta('settings', {})) };
   applyTheme(state.settings.theme);
+  await store.migrateEventsToTasks();
   await store.rollForwardRepeats();
 
   buildShell();
@@ -91,7 +92,6 @@ function buildShell() {
 }
 
 const TABS = [
-  { id: 'today', label: '오늘', ico: 'today' },
   { id: 'calendar', label: '캘린더', ico: 'calendar' },
   { id: 'folders', label: '폴더', ico: 'folder' },
   { id: 'dday', label: '디데이', ico: 'dday' },
@@ -144,7 +144,7 @@ async function render() {
     case 'dday': [header, content] = await renderDday(); break;
     case 'money': [header, content] = await renderMoney(); break;
     case 'settings': [header, content] = await renderSettings(); break;
-    default: [header, content] = await renderToday();
+    default: [header, content] = await renderCalendar();
   }
   if (token !== renderToken) return; // 더 최신 렌더가 있으면 버립니다.
 
@@ -190,27 +190,33 @@ function iconBtn(name, label, onclick) {
 
 /* ---------------- 오늘 ---------------- */
 
-async function renderToday() {
-  const header = [
-    title('오늘', formatDate(todayKey(), { withYear: false })),
-    iconBtn('search', '검색', openSearch),
-  ];
-
-  const { overdue, today, someday } = await store.todayBuckets();
-  const upcoming = await store.ddayItems();
-  const nearDday = upcoming.filter((d) => {
-    const diff = diffDays(todayKey(), d.dueDate);
-    return diff !== null && diff >= 0 && diff <= 30;
-  }).slice(0, 3);
-
-  const content = [];
+/** 캘린더 위쪽에 붙는 요약 — 지난 할 일, 오늘 쓴 돈, 다가오는 디데이 */
+async function calendarSummary() {
+  const out = [];
 
   const banner = await notificationBanner();
-  if (banner) content.push(banner);
+  if (banner) out.push(banner);
+
+  const { overdue } = await store.todayBuckets();
+  if (overdue.length) {
+    out.push(el('button', {
+      type: 'button',
+      class: 'overdue-banner',
+      onclick: () => {
+        state.selectedDate = overdue[0].dueDate;
+        state.cal = { y: Number(overdue[0].dueDate.slice(0, 4)), m: Number(overdue[0].dueDate.slice(5, 7)) - 1 };
+        render();
+      },
+    }, [
+      el('span', { class: 'ob-dot' }),
+      el('span', { class: 'ob-text', text: `아직 끝내지 않은 지난 할 일 ${overdue.length}개` }),
+      el('span', { class: 'ob-go', text: '보기 ›' }),
+    ]));
+  }
 
   const spend = await money.summary();
   if (spend.today || spend.todayCount) {
-    content.push(el('button', {
+    out.push(el('button', {
       type: 'button',
       class: 'today-money',
       onclick: () => go('money'),
@@ -221,34 +227,7 @@ async function renderToday() {
     ]));
   }
 
-  if (nearDday.length) {
-    content.push(section('다가오는 디데이'));
-    const row = el('div', { class: 'card-list' });
-    for (const d of nearDday) row.append(await ddayCard(d, { compact: true }));
-    content.push(row);
-  }
-
-  if (overdue.length) {
-    content.push(section('지난 할 일', overdue.length, true));
-    content.push(await itemList(overdue));
-  }
-
-  content.push(section('오늘', today.length));
-  if (today.length) content.push(await itemList(today));
-  else {
-    content.push(el('div', { class: 'empty' }, [
-      el('span', { class: 'big', text: '🌿' }),
-      el('p', { text: '오늘 할 일이 없습니다.' }),
-      el('p', { text: '아래 ＋ 버튼으로 추가해 보세요.' }),
-    ]));
-  }
-
-  if (someday.length) {
-    content.push(section('날짜 없음', someday.length));
-    content.push(await itemList(someday));
-  }
-
-  return [header, content];
+  return out;
 }
 
 function section(text, count, warn = false) {
@@ -362,6 +341,7 @@ async function itemCard(item, folder) {
 
 async function renderCalendar() {
   const { y, m } = state.cal;
+  const prefix = `${y}-${String(m + 1).padStart(2, '0')}`;
   const header = [
     title('캘린더', `${y}년 ${m + 1}월`),
     iconBtn('search', '검색', openSearch),
@@ -373,14 +353,13 @@ async function renderCalendar() {
     }),
   ];
 
-  const content = [];
+  const content = [...(await calendarSummary())];
 
-  const head = el('div', { class: 'cal-head' }, [
+  content.push(el('div', { class: 'cal-head' }, [
     el('button', { type: 'button', text: '‹', 'aria-label': '이전 달', onclick: () => shiftMonth(-1) }),
     el('div', { class: 'month', text: `${y}년 ${m + 1}월` }),
     el('button', { type: 'button', text: '›', 'aria-label': '다음 달', onclick: () => shiftMonth(1) }),
-  ]);
-  content.push(head);
+  ]));
 
   const wd = el('div', { class: 'weekdays' });
   WEEKDAYS.forEach((w, i) => wd.append(el('div', {
@@ -390,65 +369,176 @@ async function renderCalendar() {
   content.push(wd);
 
   const summary = await store.monthSummary(y, m);
+  const spans = await store.spanningItems(prefix);
+  const folders = await store.getFolders();
+  const folderColor = new Map(folders.map((f) => [f.id, f.color]));
+  const cells = monthGrid(y, m);
+
   const grid = el('div', { class: 'cal-grid' });
-  monthGrid(y, m).forEach((cell) => {
+  for (let w = 0; w < 6; w++) {
+    const week = cells.slice(w * 7, w * 7 + 7);
+    grid.append(calendarWeek(week, summary, spans, folderColor));
+  }
+  content.push(grid);
+
+  content.push(await dayPanel(state.selectedDate));
+  return [header, content];
+}
+
+/** 한 주(7칸) + 그 주를 가로지르는 기간 막대 */
+function calendarWeek(week, summary, spans, folderColor) {
+  const lanes = layoutSpans(week, spans);
+  const laneCount = Math.min(lanes.length, 3);
+
+  const row = el('div', { class: 'cal-week' });
+  const cellWrap = el('div', { class: 'cal-week-cells' });
+
+  week.forEach((cell) => {
     const dow = cell.date.getDay();
     const s = summary.get(cell.key);
-    const c = el('button', {
+    const btn = el('button', {
       type: 'button',
       class: [
         'cal-cell',
         cell.inMonth ? '' : 'out',
         cell.isToday ? 'today' : '',
         state.selectedDate === cell.key ? 'selected' : '',
+        s && s.overdue ? 'overdue' : '',
         dow === 0 ? 'sun' : dow === 6 ? 'sat' : '',
       ].filter(Boolean).join(' '),
       'aria-label': `${cell.date.getMonth() + 1}월 ${cell.date.getDate()}일`,
+      style: { '--lanes': String(laneCount) },
       onclick: () => {
         state.selectedDate = cell.key;
         if (!cell.inMonth) state.cal = { y: cell.date.getFullYear(), m: cell.date.getMonth() };
         render();
       },
-    }, [
-      el('span', { class: 'num', text: String(cell.date.getDate()) }),
-    ]);
-    if (s) {
-      const dots = el('div', { class: 'dots' });
-      const n = Math.min(s.total, 4);
-      for (let i = 0; i < n; i++) {
-        dots.append(el('i', { class: s.hasDday && i === 0 ? 'dday' : (s.done >= s.total ? 'done' : '') }));
-      }
-      c.append(dots);
-    }
-    grid.append(c);
-  });
-  content.push(grid);
+    }, [el('span', { class: 'num', text: String(cell.date.getDate()) })]);
 
-  /* 선택한 날짜의 목록 */
-  const items = await store.itemsForDate(state.selectedDate);
+    // 하루짜리 항목은 점으로 (막대로 그린 항목은 빼고 셉니다)
+    if (s) {
+      const single = s.total - countSpansOn(spans, cell.key);
+      if (single > 0) {
+        const dots = el('div', { class: 'dots' });
+        for (let i = 0; i < Math.min(single, 4); i++) {
+          dots.append(el('i', { class: s.hasDday && i === 0 ? 'dday' : (s.done >= s.total ? 'done' : '') }));
+        }
+        btn.append(dots);
+      }
+    }
+    cellWrap.append(btn);
+  });
+
+  row.append(cellWrap);
+
+  if (laneCount) {
+    const bars = el('div', { class: 'cal-bars', style: { '--lanes': String(laneCount) } });
+    lanes.slice(0, 3).forEach((lane, li) => {
+      lane.forEach((seg) => {
+        const color = folderColor.get(seg.item.folderId);
+        bars.append(el('div', {
+          class: 'cal-bar'
+            + (seg.item.type === 'dday' ? ' dday' : '')
+            + (seg.item.done ? ' done' : '')
+            + (seg.startsHere ? ' start' : '')
+            + (seg.endsHere ? ' end' : ''),
+          style: {
+            left: `calc(${(seg.from / 7) * 100}% + 2px)`,
+            width: `calc(${((seg.to - seg.from + 1) / 7) * 100}% - 4px)`,
+            top: `${li * 9}px`,
+            background: color || 'var(--accent)',
+          },
+          title: seg.item.title,
+          onclick: (e) => { e.stopPropagation(); editItem(seg.item.id); },
+        }, [seg.startsHere ? el('span', { text: seg.item.title }) : null]));
+      });
+    });
+    row.append(bars);
+  }
+  return row;
+}
+
+/** 그 주를 지나가는 항목들을 겹치지 않게 줄(lane)에 배치합니다. */
+function layoutSpans(week, spans) {
+  const first = week[0].key;
+  const last = week[6].key;
+  const lanes = [];
+
+  for (const item of spans) {
+    if (item.dueDate < first || item.startDate > last) continue;
+    const from = Math.max(0, week.findIndex((c) => c.key >= item.startDate));
+    let to = week.findIndex((c) => c.key > item.dueDate);
+    to = to === -1 ? 6 : to - 1;
+    if (to < from) continue;
+
+    const seg = {
+      item,
+      from,
+      to,
+      startsHere: item.startDate >= first,
+      endsHere: item.dueDate <= last,
+    };
+    let placed = false;
+    for (const lane of lanes) {
+      if (lane.every((s2) => seg.to < s2.from || seg.from > s2.to)) {
+        lane.push(seg);
+        placed = true;
+        break;
+      }
+    }
+    if (!placed) lanes.push([seg]);
+  }
+  return lanes;
+}
+
+function countSpansOn(spans, key) {
+  return spans.filter((it) => it.startDate <= key && key <= it.dueDate).length;
+}
+
+/** 날짜를 고르면 그 날의 일정과 가계부를 함께 보여 줍니다. */
+async function dayPanel(dateKey) {
+  const items = await store.itemsForDate(dateKey);
+  const expenses = await money.forDate(dateKey);
+  const spent = expenses.filter((r) => r.type !== 'income').reduce((t, r) => t + r.amount, 0);
+  const earned = expenses.filter((r) => r.type === 'income').reduce((t, r) => t + r.amount, 0);
+
   const panel = el('section', { class: 'day-panel' }, [
     el('h2', {}, [
-      el('span', { text: formatDate(state.selectedDate, { withYear: false }) }),
-      el('span', { class: 'dday-tag', text: relativeDateLabel(state.selectedDate) }),
-      el('span', { style: { flex: '1' } }),
+      el('span', { text: formatDate(dateKey, { withYear: false }) }),
+      el('span', { class: 'dday-tag', text: relativeDateLabel(dateKey) }),
+    ]),
+    el('div', { class: 'day-actions' }, [
       el('button', {
-        type: 'button',
-        class: 'chip accent',
-        text: '＋ 추가',
-        onclick: () => createItem({ dueDate: state.selectedDate }),
+        type: 'button', class: 'chip accent', text: '＋ 할 일',
+        onclick: () => createItem({ dueDate: dateKey }),
+      }),
+      el('button', {
+        type: 'button', class: 'chip', text: '＋ 지출',
+        onclick: () => createExpense({ date: dateKey }),
       }),
     ]),
   ]);
+
   if (items.length) panel.append(await itemList(items));
-  else {
+
+  if (expenses.length) {
+    panel.append(el('div', { class: 'day-money-head' }, [
+      el('span', { text: '가계부' }),
+      el('span', { class: 'money-num', text: money.formatWon(spent) }),
+      earned ? el('span', { class: 'money-num income', text: money.formatWon(earned, { sign: true }) }) : null,
+    ]));
+    const list = el('div', { class: 'card-list' });
+    expenses.forEach((r) => list.append(expenseRow(r)));
+    panel.append(list);
+  }
+
+  if (!items.length && !expenses.length) {
     panel.append(el('div', { class: 'empty' }, [
       el('span', { class: 'big', text: '📭' }),
-      el('p', { text: '이 날에는 일정이 없습니다.' }),
+      el('p', { text: '이 날에는 기록이 없습니다.' }),
     ]));
   }
-  content.push(panel);
-
-  return [header, content];
+  return panel;
 }
 
 function shiftMonth(delta) {
@@ -577,7 +667,7 @@ async function renderDday() {
   return [header, content];
 }
 
-async function ddayCard(item, { compact = false } = {}) {
+async function ddayCard(item) {
   const diff = diffDays(todayKey(), item.dueDate);
   const cls = ['dday-card', diff === 0 ? 'today' : (diff < 0 ? 'past' : '')].filter(Boolean);
   const folder = await store.getFolder(item.folderId);
@@ -606,7 +696,7 @@ async function ddayCard(item, { compact = false } = {}) {
   }
 
   // 디데이에도 체크리스트를 보여 주고 바로 체크할 수 있게 합니다.
-  if (!compact) info.append(...checklistNodes(item, { limit: 5, withBar: false }));
+  info.append(...checklistNodes(item, { limit: 5, withBar: false }));
 
   const parts = [
     el('div', { class: 'big', text: ddayLabel(item.dueDate) }),
@@ -614,7 +704,7 @@ async function ddayCard(item, { compact = false } = {}) {
   ];
 
   let cover = null;
-  if (!compact && (item.photoIds || []).length) {
+  if ((item.photoIds || []).length) {
     const photos = await media.getPhotos(item.photoIds);
     if (photos.length) {
       cover = el('img', {
@@ -716,6 +806,9 @@ async function renderMoney() {
       onclick: () => { state.moneyMonth = money.shiftMonthKey(monthKey, 1); render(); } }),
   ]));
 
+  /* 신용카드 결제 예정 */
+  content.push(await cardPanel());
+
   /* 요약 — 오늘 / 이번 달 / 신용카드 */
   content.push(el('div', { class: 'stat-row' }, [
     statTile('오늘 쓴 돈', money.formatWon(sum.today), sum.todayCount ? `${sum.todayCount}건` : '기록 없음', 'today'),
@@ -792,6 +885,118 @@ async function renderMoney() {
   }
 
   return [header, content];
+}
+
+/** 신용카드 합산 기간 · 결제일 · 선납 */
+async function cardPanel() {
+  const st = await money.cardStatus();
+  const c = st.cycle;
+  const paid = c.prepaid;
+  const dLabel = c.daysLeft === 0 ? '오늘 결제'
+    : c.daysLeft > 0 ? `D-${c.daysLeft}` : `${Math.abs(c.daysLeft)}일 지남`;
+
+  const card = el('section', { class: 'card-panel' + (paid ? ' paid' : '') });
+
+  card.append(el('div', { class: 'cp-top' }, [
+    el('span', { class: 'cp-title', text: '신용카드 결제 예정' }),
+    el('button', {
+      type: 'button', class: 'cp-setting', 'aria-label': '결제 주기 설정',
+      onclick: openCardSettings,
+    }, [icon('settings', { size: 17 })]),
+  ]));
+
+  card.append(el('div', { class: 'cp-amount money-num', text: money.formatWon(st.amount) }));
+
+  card.append(el('div', { class: 'cp-line' }, [
+    el('span', { class: 'cp-key', text: '합산 기간' }),
+    el('span', { class: 'cp-val', text: money.formatCycleRange(c) }),
+  ]));
+  card.append(el('div', { class: 'cp-line' }, [
+    el('span', { class: 'cp-key', text: '결제일' }),
+    el('span', { class: 'cp-val' }, [
+      el('span', { text: formatDate(c.payDate, { withYear: false }) }),
+      el('span', { class: 'cp-dday' + (c.daysLeft <= 3 && c.daysLeft >= 0 ? ' near' : ''), text: dLabel }),
+    ]),
+  ]));
+  if (st.prev.amount) {
+    card.append(el('div', { class: 'cp-line' }, [
+      el('span', { class: 'cp-key', text: '지난 회차' }),
+      el('span', { class: 'cp-val' }, [
+        el('span', { class: 'money-num', text: money.formatWon(st.prev.amount) }),
+        el('span', { class: 'cp-dday', text: st.prev.prepaid ? '선납함' : '결제됨' }),
+      ]),
+    ]));
+  }
+
+  card.append(el('button', {
+    type: 'button',
+    class: 'btn' + (paid ? ' primary' : ''),
+    style: { marginTop: '12px' },
+    text: paid ? '✓ 선납 완료 — 취소하려면 누르세요' : '이 회차 선납했어요',
+    onclick: async () => {
+      await money.togglePrepaid(c.key);
+      toast(paid ? '선납 표시를 지웠습니다.' : '선납으로 표시했습니다.');
+    },
+  }));
+
+  return card;
+}
+
+async function openCardSettings() {
+  const cur = await money.getCardSettings();
+  const draft = { ...cur };
+
+  await openSheet({
+    title: '카드 결제 주기',
+    confirmLabel: '저장',
+    buildBody: ({ body }) => {
+      body.append(el('div', { class: 'hint' }, [
+        el('span', { text: '카드사가 정한 합산 마감일과 결제일을 넣어 주세요. ' }),
+        el('span', { class: 'strong', text: '마감일까지 쓴 금액이 그 다음 결제일에 빠져나갑니다.' }),
+      ]));
+
+      const closeSel = el('select', {
+        onchange: (e) => { draft.closingDay = Number(e.target.value); },
+      }, [
+        el('option', { value: '0', text: '말일', selected: Number(draft.closingDay) === 0 }),
+        ...[10, 12, 14, 15, 17, 20, 25].map((d) => el('option', {
+          value: String(d), text: `${d}일`, selected: Number(draft.closingDay) === d,
+        })),
+      ]);
+      body.append(field('합산 마감일', closeSel));
+
+      const monthSel = el('select', {
+        onchange: (e) => { draft.paymentNextMonth = e.target.value === '1'; },
+      }, [
+        el('option', { value: '1', text: '다음 달', selected: draft.paymentNextMonth }),
+        el('option', { value: '0', text: '같은 달', selected: !draft.paymentNextMonth }),
+      ]);
+      const daySel = el('select', {
+        onchange: (e) => { draft.paymentDay = Number(e.target.value); },
+      }, [1, 5, 10, 12, 13, 14, 15, 17, 20, 21, 23, 25, 27].map((d) => el('option', {
+        value: String(d), text: `${d}일`, selected: Number(draft.paymentDay) === d,
+      })));
+      body.append(el('div', { class: 'field' }, [
+        el('label', { text: '결제일' }),
+        el('div', { class: 'row' }, [monthSel, daySel]),
+      ]));
+
+      const preview = el('div', { class: 'hint' });
+      const refresh = () => {
+        const c = money.cycleOf(money.currentCycleKey(draft), draft);
+        preview.replaceChildren(
+          el('span', { text: `이번 회차: ${money.formatCycleRange(c)}` }),
+          el('br'),
+          el('span', { class: 'strong', text: `${formatDate(c.payDate, { withYear: true })} 결제` }),
+        );
+      };
+      [closeSel, monthSel, daySel].forEach((n) => n.addEventListener('change', refresh));
+      refresh();
+      body.append(preview);
+    },
+    onConfirm: async () => money.setCardSettings(draft),
+  });
+  render();
 }
 
 function statTile(label, value, sub, kind) {
@@ -1079,7 +1284,7 @@ async function renderSettings() {
       await store.wipeAll();
       await store.ensureSeed();
       toast('모두 삭제했습니다.');
-      go('today');
+      go('calendar');
     },
   }));
   content.push(dataGroup);
@@ -1101,6 +1306,10 @@ async function renderSettings() {
   content.push(aboutGroup);
 
   return [header, content];
+}
+
+function field(label, ...controls) {
+  return el('div', { class: 'field' }, [el('label', { text: label }), ...controls]);
 }
 
 function group(name) {
