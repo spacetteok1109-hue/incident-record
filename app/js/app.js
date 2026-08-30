@@ -14,7 +14,7 @@ import {
   relativeDateLabel, diffDays, periodProgress, formatRange, REPEAT_LABELS, bytesToText, debounce,
 } from './util.js';
 
-const APP_VERSION = '2.0.0';
+const APP_VERSION = '2.1.0';
 
 const state = {
   tab: 'calendar',
@@ -22,7 +22,7 @@ const state = {
   moneyMonth: money.thisMonthKey(),
   selectedDate: todayKey(),
   folderId: null,
-  settings: { theme: 'auto', hideCompleted: false, showBadge: true },
+  settings: { theme: 'auto', hideCompleted: false, showBadge: true, showDdayOnCalendar: true },
 };
 
 const main = () => $('#view');
@@ -341,7 +341,6 @@ async function itemCard(item, folder) {
 
 async function renderCalendar() {
   const { y, m } = state.cal;
-  const prefix = `${y}-${String(m + 1).padStart(2, '0')}`;
   const header = [
     title('캘린더', `${y}년 ${m + 1}월`),
     iconBtn('search', '검색', openSearch),
@@ -368,11 +367,14 @@ async function renderCalendar() {
   })));
   content.push(wd);
 
-  const summary = await store.monthSummary(y, m);
-  const spans = await store.spanningItems(prefix);
+  const withDday = state.settings.showDdayOnCalendar !== false;
+  const cells = monthGrid(y, m);
+  const from = cells[0].key;
+  const to = cells[cells.length - 1].key;
+  const summary = await store.rangeSummary(from, to, { includeDday: withDday });
+  const spans = await store.spanningItems(from, to, { includeDday: withDday });
   const folders = await store.getFolders();
   const folderColor = new Map(folders.map((f) => [f.id, f.color]));
-  const cells = monthGrid(y, m);
 
   const grid = el('div', { class: 'cal-grid' });
   for (let w = 0; w < 6; w++) {
@@ -417,7 +419,7 @@ function calendarWeek(week, summary, spans, folderColor) {
 
     // 하루짜리 항목은 점으로 (막대로 그린 항목은 빼고 셉니다)
     if (s) {
-      const single = s.total - countSpansOn(spans, cell.key);
+      const single = s.total - countSpanMarksOn(spans, cell.key);
       if (single > 0) {
         const dots = el('div', { class: 'dots' });
         for (let i = 0; i < Math.min(single, 4); i++) {
@@ -491,8 +493,18 @@ function layoutSpans(week, spans) {
   return lanes;
 }
 
-function countSpansOn(spans, key) {
-  return spans.filter((it) => it.startDate <= key && key <= it.dueDate).length;
+/**
+ * 그 날짜에 '점'으로 세어진 기간 항목의 개수.
+ * 달 요약은 시작일과 마감일에만 표시를 남기므로, 지나가는 가운데 날짜는
+ * 빼면 안 됩니다. (그러면 같은 날의 다른 항목까지 사라집니다.)
+ */
+function countSpanMarksOn(spans, key) {
+  let n = 0;
+  for (const it of spans) {
+    if (it.dueDate === key) n++;
+    if (it.startDate === key && it.startDate !== it.dueDate) n++;
+  }
+  return n;
 }
 
 /** 날짜를 고르면 그 날의 일정과 가계부를 함께 보여 줍니다. */
@@ -1217,6 +1229,16 @@ async function renderSettings() {
     toggle: state.settings.hideCompleted,
     onclick: async () => {
       state.settings.hideCompleted = !state.settings.hideCompleted;
+      await db.setMeta('settings', state.settings);
+      render();
+    },
+  }));
+  viewGroup.append(settingsRow({
+    label: '캘린더에 디데이 표시',
+    desc: '끄면 달력의 점과 줄에서 디데이가 빠집니다. 디데이 탭과 날짜별 목록에는 그대로 남습니다.',
+    toggle: state.settings.showDdayOnCalendar !== false,
+    onclick: async () => {
+      state.settings.showDdayOnCalendar = state.settings.showDdayOnCalendar === false;
       await db.setMeta('settings', state.settings);
       render();
     },

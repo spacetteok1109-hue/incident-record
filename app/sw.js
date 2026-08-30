@@ -1,6 +1,6 @@
 /* sw.js — 오프라인 사용과 백그라운드 알림 확인 */
 
-const CACHE = 'todo-cal-v9';
+const CACHE = 'todo-cal-v10';
 const ASSETS = [
   './',
   './index.html',

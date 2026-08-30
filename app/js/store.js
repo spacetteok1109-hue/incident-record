@@ -325,11 +325,12 @@ export async function todayBuckets() {
  * 달력에 줄(막대)로 그릴 항목들.
  * 시작일과 마감일이 다른, 즉 여러 날에 걸친 항목만 해당합니다.
  */
-export async function spanningItems(monthPrefix) {
+export async function spanningItems(fromKey, toKey, { includeDday = true } = {}) {
   const items = await getItems();
   return items
+    .filter((it) => includeDday || it.type !== 'dday')
     .filter((it) => it.startDate && it.dueDate && it.startDate < it.dueDate)
-    .filter((it) => it.startDate.slice(0, 7) <= monthPrefix && it.dueDate.slice(0, 7) >= monthPrefix)
+    .filter((it) => it.startDate <= toKey && it.dueDate >= fromKey)
     .sort((a, b) => (a.startDate === b.startDate
       ? (a.dueDate < b.dueDate ? 1 : -1)
       : (a.startDate < b.startDate ? -1 : 1)));
@@ -502,14 +503,18 @@ export async function wipeAll() {
   emit();
 }
 
-/** 달력 점 표시에 쓰는 월별 요약 */
-export async function monthSummary(year, month) {
-  const items = await getItems();
-  const prefix = `${year}-${String(month + 1).padStart(2, '0')}`;
+/**
+ * 달력 칸에 쓰는 요약.
+ * 달력에는 앞뒤 달의 며칠도 함께 보이므로, 달이 아니라 화면에 보이는
+ * 날짜 범위 전체를 대상으로 합니다.
+ */
+export async function rangeSummary(fromKey, toKey, { includeDday = true } = {}) {
+  const all = await getItems();
+  const items = includeDday ? all : all.filter((it) => it.type !== 'dday');
   const today = todayKey();
   const map = new Map();
   const mark = (key, it) => {
-    if (!key || !key.startsWith(prefix)) return;
+    if (!key || key < fromKey || key > toKey) return;
     const cur = map.get(key) || { total: 0, done: 0, hasDday: false, overdue: false };
     cur.total++;
     if (it.done) cur.done++;
