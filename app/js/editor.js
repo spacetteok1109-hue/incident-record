@@ -180,6 +180,7 @@ function buildForm(api, draft, folders, addedPhotoIds, original) {
             el('span', { class: 'warn', text: '⚠️ 마감일이 시작일보다 빠릅니다.' }),
           ]));
         }
+        dynamic.append(barToggleRow(draft, rerenderDynamic));
       }
 
       const clearRow = el('button', {
@@ -468,6 +469,7 @@ function buildPeriodFields(draft, endInput) {
       el('div', { class: 'field' }, [el('label', { text: '시작일' }), startInput]),
       durField,
       hint,
+      barToggleRow(draft, refresh),
     );
   }
 
@@ -488,6 +490,29 @@ function summaryNodes(draft) {
   else if (p.phase === 'after') phase = `${p.sinceEnd}일 전에 끝난 기간입니다.`;
   else phase = `오늘 ${p.elapsed}일째 \u00b7 ${p.remaining}일 남음 (${p.percent}%)`;
   return [el('span', { text: range }), el('br'), el('span', { class: 'strong', text: phase })];
+}
+
+/**
+ * 기간이 있는 항목을 달력에 어떻게 보일지 고르는 스위치.
+ * 꺼도 시작일은 남아 있어 진행률 계산은 그대로입니다.
+ */
+function barToggleRow(draft, onChange) {
+  const sw = el('span', { class: 'switch', role: 'switch',
+    'aria-checked': String(draft.showAsBar !== false) });
+  return el('button', {
+    type: 'button',
+    class: 'switch-row',
+    style: { width: '100%', textAlign: 'left' },
+    onclick: () => { draft.showAsBar = draft.showAsBar === false; onChange(); },
+  }, [
+    el('div', {}, [
+      el('div', { class: 'label', text: '캘린더에 줄로 표시' }),
+      el('div', { class: 'desc', text: draft.showAsBar === false
+        ? '지금은 마감일에만 점으로 표시됩니다. 기간 계산은 그대로입니다.'
+        : '시작일부터 마감일까지 줄로 이어집니다.' }),
+    ]),
+    sw,
+  ]);
 }
 
 function field(label, ...controls) {

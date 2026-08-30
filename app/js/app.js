@@ -14,7 +14,7 @@ import {
   relativeDateLabel, diffDays, periodProgress, formatRange, REPEAT_LABELS, bytesToText, debounce,
 } from './util.js';
 
-const APP_VERSION = '2.1.1';
+const APP_VERSION = '2.2.0';
 
 const state = {
   tab: 'calendar',
