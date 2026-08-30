@@ -8,7 +8,7 @@ export const FOLDER_COLORS = [
   '#38a3d1', '#a061e0', '#d9534f', '#8a94a6',
 ];
 
-export const TYPE_LABELS = { task: '할 일', event: '일정', dday: '디데이' };
+export const TYPE_LABELS = { task: '할 일', dday: '디데이' };
 
 /** 시간이 지정되지 않은 항목의 기본 알림 시각 */
 export const DEFAULT_ALLDAY_HOUR = '09:00';
@@ -321,6 +321,20 @@ export async function todayBuckets() {
   };
 }
 
+/**
+ * 달력에 줄(막대)로 그릴 항목들.
+ * 시작일과 마감일이 다른, 즉 여러 날에 걸친 항목만 해당합니다.
+ */
+export async function spanningItems(monthPrefix) {
+  const items = await getItems();
+  return items
+    .filter((it) => it.startDate && it.dueDate && it.startDate < it.dueDate)
+    .filter((it) => it.startDate.slice(0, 7) <= monthPrefix && it.dueDate.slice(0, 7) >= monthPrefix)
+    .sort((a, b) => (a.startDate === b.startDate
+      ? (a.dueDate < b.dueDate ? 1 : -1)
+      : (a.startDate < b.startDate ? -1 : 1)));
+}
+
 export async function ddayItems() {
   const items = await getItems();
   const list = items.filter((it) => it.type === 'dday' && it.dueDate);
@@ -360,6 +374,19 @@ export async function purgeCompleted(olderThanDays = 0) {
   const cutoff = Date.now() - olderThanDays * 86400000;
   const targets = items.filter((it) => it.done && (it.doneAt || 0) <= cutoff);
   for (const it of targets) await deleteItem(it.id);
+  return targets.length;
+}
+
+/**
+ * 예전 버전에서 만든 '일정(event)' 항목을 '할 일(task)'로 옮깁니다.
+ * 두 종류가 하는 일이 같아 하나로 합쳤습니다. 시간·반복·알림은 그대로 남습니다.
+ */
+export async function migrateEventsToTasks() {
+  const items = await getItems();
+  const targets = items.filter((it) => it.type === 'event');
+  if (!targets.length) return 0;
+  await db.putAll('items', targets.map((it) => ({ ...it, type: 'task', updatedAt: Date.now() })));
+  invalidate();
   return targets.length;
 }
 
@@ -479,18 +506,20 @@ export async function wipeAll() {
 export async function monthSummary(year, month) {
   const items = await getItems();
   const prefix = `${year}-${String(month + 1).padStart(2, '0')}`;
+  const today = todayKey();
   const map = new Map();
   const mark = (key, it) => {
     if (!key || !key.startsWith(prefix)) return;
-    const cur = map.get(key) || { total: 0, done: 0, hasDday: false };
+    const cur = map.get(key) || { total: 0, done: 0, hasDday: false, overdue: false };
     cur.total++;
     if (it.done) cur.done++;
     if (it.type === 'dday') cur.hasDday = true;
+    // 지난 날짜인데 아직 끝내지 않은 할 일이 있으면 그 칸을 표시합니다.
+    if (!it.done && it.type !== 'dday' && key < today) cur.overdue = true;
     map.set(key, cur);
   };
   for (const it of items) {
     mark(it.dueDate, it);
-    // 기간이 있는 항목은 시작일에도 점을 찍습니다.
     if (it.startDate && it.startDate !== it.dueDate) mark(it.startDate, it);
   }
   return map;

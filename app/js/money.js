@@ -6,7 +6,7 @@
 
 import * as db from './db.js';
 import { notifyChanged } from './store.js';
-import { todayKey, formatDate } from './util.js';
+import { todayKey, formatDate, addDaysKey, diffDays } from './util.js';
 
 export const METHODS = [
   { value: 'credit', label: '신용카드', short: '신용' },
@@ -225,4 +225,126 @@ export async function monthsWithData() {
   const set = new Set(rows.map((r) => monthKeyOf(r.date)));
   set.add(thisMonthKey());
   return [...set].sort().reverse();
+}
+
+
+/* ==========================================================
+   신용카드 결제 주기
+   ==========================================================
+   합산 마감일(closingDay)까지의 사용액이 한 회차가 되고,
+   그 다음 결제일(paymentDay)에 빠져나갑니다.
+   예) 마감 말일 · 결제 다음 달 25일  →  8월 1~31일 사용분을 9월 25일에 결제
+       마감 14일  · 결제 다음 달 1일  →  7월 15일~8월 14일 사용분을 9월 1일에 결제
+   선납은 회차별로 표시해 둡니다(어느 회차를 미리 냈는지).
+*/
+
+export const DEFAULT_CARD = {
+  closingDay: 0,        // 0 = 말일
+  paymentDay: 25,
+  paymentNextMonth: true,
+  prepaid: {},          // { '2026-08': true } — 회차 키는 마감월
+};
+
+export async function getCardSettings() {
+  const saved = await db.getMeta('cardSettings', null);
+  return { ...DEFAULT_CARD, ...(saved || {}), prepaid: { ...(saved?.prepaid || {}) } };
+}
+
+export async function setCardSettings(patch) {
+  const cur = await getCardSettings();
+  const next = { ...cur, ...patch };
+  await db.setMeta('cardSettings', next);
+  notifyChanged();
+  return next;
+}
+
+function lastDayOf(year, month /* 1-based */) {
+  return new Date(year, month, 0).getDate();
+}
+
+function dateKey(year, month, day) {
+  const last = lastDayOf(year, month);
+  const d = Math.min(day <= 0 ? last : day, last);
+  return `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+}
+
+/**
+ * 마감월(cycleKey, 'YYYY-MM')의 결제 회차 정보.
+ * 합산 기간의 시작·끝, 결제일, 남은 날짜를 돌려줍니다.
+ */
+export function cycleOf(cycleKey, settings = DEFAULT_CARD) {
+  const [y, m] = cycleKey.split('-').map(Number);
+  const closing = Number(settings.closingDay) || 0;
+
+  const end = dateKey(y, m, closing);
+  // 지난달 마감 다음 날부터 이번 마감일까지
+  const prev = new Date(y, m - 2, 1);
+  const prevEnd = dateKey(prev.getFullYear(), prev.getMonth() + 1, closing);
+  const start = addDaysKey(prevEnd, 1);
+
+  const payMonth = new Date(y, m - 1 + (settings.paymentNextMonth ? 1 : 0), 1);
+  const payDate = dateKey(payMonth.getFullYear(), payMonth.getMonth() + 1, Number(settings.paymentDay) || 25);
+
+  return {
+    key: cycleKey,
+    start,
+    end,
+    payDate,
+    daysLeft: diffDays(todayKey(), payDate),
+    prepaid: !!settings.prepaid?.[cycleKey],
+  };
+}
+
+/** 오늘이 속한 마감 회차의 키('YYYY-MM') */
+export function currentCycleKey(settings = DEFAULT_CARD) {
+  const today = todayKey();
+  const [y, m] = today.split('-').map(Number);
+  const thisCycle = cycleOf(`${y}-${String(m).padStart(2, '0')}`, settings);
+  // 이미 마감이 지났으면 다음 회차입니다.
+  if (today > thisCycle.end) {
+    const n = new Date(y, m, 1);
+    return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}`;
+  }
+  return thisCycle.key;
+}
+
+/** 그 회차의 신용카드 사용액 */
+export async function cycleAmount(cycle) {
+  const rows = await getAll();
+  return rows
+    .filter((r) => r.type !== 'income' && r.method === 'credit')
+    .filter((r) => r.date >= cycle.start && r.date <= cycle.end)
+    .reduce((t, r) => t + (Number(r.amount) || 0), 0);
+}
+
+/** 화면에 뿌릴 현재 회차 요약 */
+export async function cardStatus() {
+  const settings = await getCardSettings();
+  const cycle = cycleOf(currentCycleKey(settings), settings);
+  const amount = await cycleAmount(cycle);
+  const prevKey = shiftMonthKey(cycle.key, -1);
+  const prevCycle = cycleOf(prevKey, settings);
+  return {
+    settings,
+    cycle,
+    amount,
+    prev: { ...prevCycle, amount: await cycleAmount(prevCycle) },
+  };
+}
+
+export async function togglePrepaid(cycleKey) {
+  const settings = await getCardSettings();
+  const prepaid = { ...settings.prepaid };
+  if (prepaid[cycleKey]) delete prepaid[cycleKey];
+  else prepaid[cycleKey] = true;
+  return setCardSettings({ prepaid });
+}
+
+/** '8월 1일 ~ 8월 31일' */
+export function formatCycleRange(cycle) {
+  return `${formatDate(cycle.start)} ~ ${formatDate(cycle.end)}`.replace(/ \([월화수목금토일]\)/g, '');
+}
+
+export function closingLabel(day) {
+  return Number(day) === 0 ? '말일' : `${day}일`;
 }

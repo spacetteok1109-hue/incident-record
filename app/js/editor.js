@@ -12,8 +12,8 @@ import {
 
 const TYPES = [
   { value: 'task', label: '할 일' },
-  { value: 'event', label: '일정' },
   { value: 'dday', label: '디데이' },
+  { value: 'money', label: '가계부' },
 ];
 
 const FOLDER_EMOJIS = ['📁', '🏠', '💼', '📚', '💪', '🎂', '✈️', '💰', '🛒', '❤️', '🎮', '🍽️', '🐾', '🌱', '⭐'];
@@ -73,7 +73,14 @@ function buildForm(api, draft, folders, addedPhotoIds, original) {
       type: 'button',
       text: t.label,
       'aria-pressed': String(draft.type === t.value),
-      onclick: () => {
+      onclick: async () => {
+        // 가계부는 저장하는 내용이 달라 전용 입력 화면으로 넘깁니다.
+        if (t.value === 'money') {
+          api.close(null);
+          const { openExpenseEditor } = await import('./editor.js');
+          await openExpenseEditor(null, { date: draft.dueDate || todayKey() });
+          return;
+        }
         draft.type = t.value;
         if (t.value === 'dday') {
           draft.dueTime = null;
@@ -131,7 +138,7 @@ function buildForm(api, draft, folders, addedPhotoIds, original) {
 
     if (isDday) {
       dynamic.append(buildPeriodFields(draft, dateInput));
-    } else {
+    } else {  // 할 일도 여러 날에 걸칠 수 있습니다.
       const timeInput = el('input', {
         type: 'time',
         value: draft.dueTime || '',
@@ -143,6 +150,38 @@ function buildForm(api, draft, folders, addedPhotoIds, original) {
       ]);
       dynamic.append(row);
 
+      // 여러 날에 걸치는 할 일이면 시작일을 둘 수 있습니다(달력에 줄로 표시).
+      const spanToggle = el('span', { class: 'switch', role: 'switch',
+        'aria-checked': String(!!draft.startDate) });
+      dynamic.append(el('button', {
+        type: 'button',
+        class: 'switch-row',
+        style: { width: '100%', textAlign: 'left' },
+        onclick: () => {
+          draft.startDate = draft.startDate ? null : (draft.dueDate || todayKey());
+          rerenderDynamic();
+        },
+      }, [
+        el('div', {}, [
+          el('div', { class: 'label', text: '여러 날에 걸침' }),
+          el('div', { class: 'desc', text: '시작일을 정하면 달력에 줄로 이어져 보입니다.' }),
+        ]),
+        spanToggle,
+      ]));
+
+      if (draft.startDate) {
+        dynamic.append(field('시작일', el('input', {
+          type: 'date',
+          value: draft.startDate,
+          onchange: (e) => { draft.startDate = e.target.value || null; rerenderDynamic(); },
+        })));
+        if (draft.dueDate && draft.startDate > draft.dueDate) {
+          dynamic.append(el('div', { class: 'hint' }, [
+            el('span', { class: 'warn', text: '⚠️ 마감일이 시작일보다 빠릅니다.' }),
+          ]));
+        }
+      }
+
       const clearRow = el('button', {
         type: 'button',
         class: 'btn-ghost',
@@ -150,6 +189,7 @@ function buildForm(api, draft, folders, addedPhotoIds, original) {
         onclick: () => {
           draft.dueDate = null;
           draft.dueTime = null;
+          draft.startDate = null;
           draft.remindOffset = null;
           rerenderDynamic();
         },
