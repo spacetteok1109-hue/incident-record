@@ -575,11 +575,22 @@ main {
 
 .dots { display: flex; gap: 3px; flex-wrap: wrap; justify-content: center; margin-top: auto; }
 .dots i {
-  width: 5px; height: 5px; border-radius: 50%;
-  background: var(--accent); display: block;
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--accent);
+  border: 1.5px solid transparent;
+  box-sizing: border-box;
+  display: block;
 }
-.dots i.done { background: var(--text-faint); }
-.dots i.dday { background: var(--warn); }
+/* 디데이는 같은 색 빈 동그라미로 구분합니다 (색은 인라인으로 폴더 색) */
+.dots i.dday { background: transparent; border-color: var(--accent); }
+.dots i.done { opacity: 0.35; }
+/* 4개를 넘으면 작은 점 하나로 줄여 표시 */
+.dots i.more {
+  width: 4px; height: 4px;
+  background: var(--text-faint);
+  border-color: transparent;
+  align-self: center;
+}
 
 /* 주 단위 행 + 기간 막대 */
 .cal-week { position: relative; }
