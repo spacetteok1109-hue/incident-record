@@ -14,7 +14,7 @@ import {
   relativeDateLabel, diffDays, periodProgress, formatRange, REPEAT_LABELS, bytesToText, debounce,
 } from './util.js';
 
-const APP_VERSION = '2.2.0';
+const APP_VERSION = '2.3.0';
 
 const state = {
   tab: 'calendar',
@@ -389,6 +389,7 @@ async function renderCalendar() {
 
 /** 한 주(7칸) + 그 주를 가로지르는 기간 막대 */
 function calendarWeek(week, summary, spans, folderColor) {
+  const spanIds = new Set(spans.map((it) => it.id));
   const lanes = layoutSpans(week, spans);
   const laneCount = Math.min(lanes.length, 3);
 
@@ -417,14 +418,28 @@ function calendarWeek(week, summary, spans, folderColor) {
       },
     }, [el('span', { class: 'num', text: String(cell.date.getDate()) })]);
 
-    // 하루짜리 항목은 점으로 (막대로 그린 항목은 빼고 셉니다)
-    if (s) {
-      const single = s.total - countSpanMarksOn(spans, cell.key);
-      if (single > 0) {
+    // 줄로 그린 항목은 빼고, 나머지는 점으로. 색은 폴더 색을 따릅니다.
+    if (s && s.marks) {
+      const dotMarks = s.marks.filter((m) => !spanIds.has(m.id));
+      if (dotMarks.length) {
         const dots = el('div', { class: 'dots' });
-        for (let i = 0; i < Math.min(single, 4); i++) {
-          dots.append(el('i', { class: s.hasDday && i === 0 ? 'dday' : (s.done >= s.total ? 'done' : '') }));
-        }
+        dotMarks.slice(0, 4).forEach((m) => {
+          const color = folderColor.get(m.folderId) || null;
+          const style = {};
+          if (m.type === 'dday') {
+            // 디데이는 같은 색의 빈 동그라미로 구분합니다.
+            style.background = 'transparent';
+            style.borderColor = color || 'var(--accent)';
+          } else if (color) {
+            style.background = color;
+            style.borderColor = color;
+          }
+          dots.append(el('i', {
+            class: (m.done ? 'done' : '') + (m.type === 'dday' ? ' dday' : ''),
+            style,
+          }));
+        });
+        if (dotMarks.length > 4) dots.append(el('i', { class: 'more' }));
         btn.append(dots);
       }
     }
@@ -491,20 +506,6 @@ function layoutSpans(week, spans) {
     if (!placed) lanes.push([seg]);
   }
   return lanes;
-}
-
-/**
- * 그 날짜에 '점'으로 세어진 기간 항목의 개수.
- * 달 요약은 시작일과 마감일에만 표시를 남기므로, 지나가는 가운데 날짜는
- * 빼면 안 됩니다. (그러면 같은 날의 다른 항목까지 사라집니다.)
- */
-function countSpanMarksOn(spans, key) {
-  let n = 0;
-  for (const it of spans) {
-    if (it.dueDate === key) n++;
-    if (it.startDate === key && it.startDate !== it.dueDate) n++;
-  }
-  return n;
 }
 
 /** 날짜를 고르면 그 날의 일정과 가계부를 함께 보여 줍니다. */

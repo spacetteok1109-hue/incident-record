@@ -518,12 +518,14 @@ export async function rangeSummary(fromKey, toKey, { includeDday = true } = {}) 
   const map = new Map();
   const mark = (key, it) => {
     if (!key || key < fromKey || key > toKey) return;
-    const cur = map.get(key) || { total: 0, done: 0, hasDday: false, overdue: false };
+    const cur = map.get(key) || { total: 0, done: 0, hasDday: false, overdue: false, marks: [] };
     cur.total++;
     if (it.done) cur.done++;
     if (it.type === 'dday') cur.hasDday = true;
     // 지난 날짜인데 아직 끝내지 않은 할 일이 있으면 그 칸을 표시합니다.
     if (!it.done && it.type !== 'dday' && key < today) cur.overdue = true;
+    // 점을 폴더 색으로 찍기 위해 항목 정보를 함께 남깁니다.
+    cur.marks.push({ id: it.id, folderId: it.folderId || null, type: it.type, done: !!it.done });
     map.set(key, cur);
   };
   for (const it of items) {
