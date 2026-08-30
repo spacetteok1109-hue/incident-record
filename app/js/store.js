@@ -132,6 +132,7 @@ export function blankItem(overrides = {}) {
     doneAt: null,
     checklist: [],
     startDate: null,
+    showAsBar: true,
     dueDate: null,
     dueTime: null,
     endTime: null,
@@ -329,6 +330,8 @@ export async function spanningItems(fromKey, toKey, { includeDday = true } = {})
   const items = await getItems();
   return items
     .filter((it) => includeDday || it.type !== 'dday')
+    // 항목별로 '마감일에만 표시'를 고른 것은 줄로 그리지 않습니다.
+    .filter((it) => it.showAsBar !== false)
     .filter((it) => it.startDate && it.dueDate && it.startDate < it.dueDate)
     .filter((it) => it.startDate <= toKey && it.dueDate >= fromKey)
     .sort((a, b) => (a.startDate === b.startDate
@@ -525,7 +528,11 @@ export async function rangeSummary(fromKey, toKey, { includeDday = true } = {}) 
   };
   for (const it of items) {
     mark(it.dueDate, it);
-    if (it.startDate && it.startDate !== it.dueDate) mark(it.startDate, it);
+    // 줄로 그리는 항목만 시작일에도 표시를 남깁니다.
+    // '마감일에만 표시'인 항목은 마감일 하나에만 점이 찍힙니다.
+    if (it.startDate && it.startDate !== it.dueDate && it.showAsBar !== false) {
+      mark(it.startDate, it);
+    }
   }
   return map;
 }
