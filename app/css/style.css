@@ -16,6 +16,7 @@
   --accent: #5865f2;
   --accent-ink: #8b96ff;
   --on-accent: #ffffff;
+  --on-accent-soft: #ffffff;
   --accent-soft: rgba(88, 101, 242, 0.16);
   --accent-glow: rgba(88, 101, 242, 0.45);
   --notice-line: rgba(88, 101, 242, 0.3);
@@ -46,6 +47,7 @@ html[data-theme='light'] {
   --text-faint: #8b93a3;
   --accent-ink: #4a55d8;
   --on-accent: #ffffff;
+  --on-accent-soft: #16192b;
   --accent-soft: rgba(88, 101, 242, 0.12);
   --accent-glow: rgba(88, 101, 242, 0.32);
   --notice-line: rgba(88, 101, 242, 0.28);
@@ -69,6 +71,7 @@ html[data-theme='modern'] {
   --accent: #14d39a;
   --accent-ink: #34e0ac;
   --on-accent: #04231a;
+  --on-accent-soft: #04231a;
   --accent-soft: rgba(20, 211, 154, 0.14);
   --accent-glow: rgba(20, 211, 154, 0.32);
   --notice-line: rgba(20, 211, 154, 0.3);
@@ -95,6 +98,7 @@ html[data-theme='mono'] {
   --accent: #1c1c1f;
   --accent-ink: #1c1c1f;
   --on-accent: #ffffff;
+  --on-accent-soft: #ffffff;
   --accent-soft: #ebebee;
   --accent-glow: rgba(0, 0, 0, 0.22);
   --notice-line: #d5d5da;
@@ -121,6 +125,7 @@ html[data-theme='sunny'] {
   --accent: #ffd029;
   --accent-ink: #8a5a00;
   --on-accent: #3a2c00;
+  --on-accent-soft: #3a2c00;
   --accent-soft: #fff2c6;
   --accent-glow: rgba(224, 176, 20, 0.45);
   --notice-line: #f0dc9a;
@@ -147,6 +152,7 @@ html[data-theme='sky'] {
   --accent: #2494d0;
   --accent-ink: #0f6d9e;
   --on-accent: #04202f;
+  --on-accent-soft: #04202f;
   --accent-soft: #dcf0fb;
   --accent-glow: rgba(36, 148, 208, 0.38);
   --notice-line: #a9d8f2;
@@ -555,8 +561,13 @@ main {
 .cal-cell.sun .num { color: var(--sun); }
 .cal-cell.sat .num { color: var(--sat); }
 .cal-cell.out .num { opacity: 0.4; }
-.cal-cell.today .num { background: var(--accent); color: var(--on-accent); }
-.cal-cell.selected { outline: 2px solid var(--accent); outline-offset: -2px; z-index: 1; }
+/* 오늘 표시는 70% 농도로 (칸 배경과 섞어 글자 대비를 지킵니다) */
+.cal-cell.today .num {
+  background: color-mix(in srgb, var(--accent) 70%, var(--bg-elev));
+  color: var(--on-accent-soft, var(--on-accent));
+}
+/* 고른 날짜는 테두리 대신 옅은 배경으로 (오늘 표시는 늘 70% 농도) */
+.cal-cell.selected { background: var(--accent-soft); z-index: 1; }
 
 .dots { display: flex; gap: 3px; flex-wrap: wrap; justify-content: center; margin-top: auto; }
 .dots i {
@@ -592,9 +603,9 @@ main {
   line-height: 7px;
   padding: 0 3px;
   white-space: nowrap;
-  opacity: 0.95;
+  opacity: 0.5;
 }
-.cal-bar.done { opacity: 0.4; }
+.cal-bar.done { opacity: 0.25; }
 .cal-bar.dday { border: 1px dashed rgba(255, 255, 255, 0.5); }
 .cal-bar span {
   display: block;
