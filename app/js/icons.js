@@ -35,6 +35,12 @@ const PATHS = {
     ['circle', { cx: 17, cy: 12, r: 2 }],
     ['circle', { cx: 9, cy: 17, r: 2 }],
   ],
+  /* 가계부 — 지갑 */
+  wallet: [
+    ['path', { d: 'M3.5 8.5a2.5 2.5 0 0 1 2.5-2.5h11.5a2.5 2.5 0 0 1 2.5 2.5v9a2.5 2.5 0 0 1-2.5 2.5H6a2.5 2.5 0 0 1-2.5-2.5z' }],
+    ['path', { d: 'M3.5 9.5V7.2a2 2 0 0 1 1.6-2l9.4-1.7' }],
+    ['circle', { cx: 16.5, cy: 13, r: 1.25, fill: 'currentColor', stroke: 'none' }],
+  ],
   search: [
     ['circle', { cx: 11, cy: 11, r: 6.5 }],
     ['path', { d: 'M20 20l-4.3-4.3' }],

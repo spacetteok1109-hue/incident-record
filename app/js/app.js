@@ -6,18 +6,20 @@ import * as media from './media.js';
 import * as notify from './notify.js';
 import * as lock from './lock.js';
 import { el, $, toast, openSheet, confirmDialog, pickerSheet, openViewer, closeTopSheet, onLongPress } from './ui.js';
-import { openItemEditor, openFolderEditor } from './editor.js';
+import { openItemEditor, openFolderEditor, openExpenseEditor } from './editor.js';
+import * as money from './money.js';
 import { icon } from './icons.js';
 import {
   WEEKDAYS, todayKey, monthGrid, ddayLabel, formatDate, formatTime,
   relativeDateLabel, diffDays, periodProgress, formatRange, REPEAT_LABELS, bytesToText, debounce,
 } from './util.js';
 
-const APP_VERSION = '1.5.0';
+const APP_VERSION = '1.6.0';
 
 const state = {
   tab: 'today',
   cal: { y: new Date().getFullYear(), m: new Date().getMonth() },
+  moneyMonth: money.thisMonthKey(),
   selectedDate: todayKey(),
   folderId: null,
   settings: { theme: 'auto', hideCompleted: false, showBadge: true },
@@ -82,7 +84,7 @@ function buildShell() {
       id: 'fab',
       type: 'button',
       'aria-label': '새 항목 추가',
-      onclick: () => createItem(),
+      onclick: () => (state.tab === 'money' ? createExpense() : createItem()),
     }, [icon('plus', { size: 26, strokeWidth: 2.2 })]),
     buildTabbar(),
   );
@@ -93,6 +95,7 @@ const TABS = [
   { id: 'calendar', label: '캘린더', ico: 'calendar' },
   { id: 'folders', label: '폴더', ico: 'folder' },
   { id: 'dday', label: '디데이', ico: 'dday' },
+  { id: 'money', label: '가계부', ico: 'wallet' },
   { id: 'settings', label: '설정', ico: 'settings' },
 ];
 
@@ -139,6 +142,7 @@ async function render() {
     case 'calendar': [header, content] = await renderCalendar(); break;
     case 'folders': [header, content] = await renderFolders(); break;
     case 'dday': [header, content] = await renderDday(); break;
+    case 'money': [header, content] = await renderMoney(); break;
     case 'settings': [header, content] = await renderSettings(); break;
     default: [header, content] = await renderToday();
   }
@@ -203,6 +207,19 @@ async function renderToday() {
 
   const banner = await notificationBanner();
   if (banner) content.push(banner);
+
+  const spend = await money.summary();
+  if (spend.today || spend.todayCount) {
+    content.push(el('button', {
+      type: 'button',
+      class: 'today-money',
+      onclick: () => go('money'),
+    }, [
+      el('span', { class: 'tm-label', text: '오늘 쓴 돈' }),
+      el('span', { class: 'tm-value money-num', text: money.formatWon(spend.today) }),
+      el('span', { class: 'tm-sub', text: `${spend.todayCount}건 ›` }),
+    ]));
+  }
 
   if (nearDday.length) {
     content.push(section('다가오는 디데이'));
@@ -673,6 +690,146 @@ function periodLabel(p) {
   return `${p.total}일 중 ${p.elapsed}일째 · ${p.remaining}일 남음`;
 }
 
+/* ---------------- 가계부 ---------------- */
+
+async function renderMoney() {
+  const monthKey = state.moneyMonth;
+  const sum = await money.summary(monthKey);
+  const rows = await money.forMonth(monthKey);
+
+  const header = [
+    title('가계부', money.formatMonth(monthKey)),
+    iconBtn('jumpToday', '이번 달로', () => {
+      state.moneyMonth = money.thisMonthKey();
+      render();
+    }),
+  ];
+
+  const content = [];
+
+  /* 월 이동 */
+  content.push(el('div', { class: 'cal-head' }, [
+    el('button', { type: 'button', text: '‹', 'aria-label': '이전 달',
+      onclick: () => { state.moneyMonth = money.shiftMonthKey(monthKey, -1); render(); } }),
+    el('div', { class: 'month', text: money.formatMonth(monthKey) }),
+    el('button', { type: 'button', text: '›', 'aria-label': '다음 달',
+      onclick: () => { state.moneyMonth = money.shiftMonthKey(monthKey, 1); render(); } }),
+  ]));
+
+  /* 요약 — 오늘 / 이번 달 / 신용카드 */
+  content.push(el('div', { class: 'stat-row' }, [
+    statTile('오늘 쓴 돈', money.formatWon(sum.today), sum.todayCount ? `${sum.todayCount}건` : '기록 없음', 'today'),
+    statTile('이 달 지출', money.formatWon(sum.month), `${sum.count}건`, 'total'),
+    statTile('신용카드', money.formatWon(sum.credit), sum.month ? `지출의 ${Math.round((sum.credit / sum.month) * 100)}%` : '—', 'card'),
+  ]));
+
+  /* 결제수단별 · 수입 */
+  const breakdown = el('div', { class: 'settings-group' });
+  breakdown.append(el('div', { class: 'head', text: '이 달 내역' }));
+  [
+    ['신용카드', sum.credit],
+    ['체크카드', sum.debit],
+    ['현금', sum.cash],
+    ['계좌이체', sum.month - sum.credit - sum.debit - sum.cash],
+  ].forEach(([label, value]) => {
+    if (!value) return;
+    breakdown.append(el('div', { class: 'settings-row' }, [
+      el('div', { class: 'grow' }, [el('div', { class: 'label', text: label })]),
+      el('span', { class: 'value money-num', text: money.formatWon(value) }),
+    ]));
+  });
+  if (sum.income) {
+    breakdown.append(el('div', { class: 'settings-row' }, [
+      el('div', { class: 'grow' }, [el('div', { class: 'label', text: '수입' })]),
+      el('span', { class: 'value money-num income', text: money.formatWon(sum.income, { sign: true }) }),
+    ]));
+    breakdown.append(el('div', { class: 'settings-row' }, [
+      el('div', { class: 'grow' }, [el('div', { class: 'label', text: '남은 금액' })]),
+      el('span', { class: 'value money-num', text: money.formatWon(sum.income - sum.month, { sign: true }) }),
+    ]));
+  }
+  if (breakdown.children.length > 1) content.push(breakdown);
+
+  /* 분류별 */
+  const cats = await money.byCategory(monthKey);
+  if (cats.length) {
+    content.push(section('분류별'));
+    const list = el('div', { class: 'cat-list' });
+    cats.slice(0, 6).forEach((c) => {
+      list.append(el('div', { class: 'cat-row' }, [
+        el('span', { class: 'cat-emoji', text: c.info.emoji }),
+        el('div', { class: 'cat-body' }, [
+          el('div', { class: 'cat-top' }, [
+            el('span', { text: c.info.label }),
+            el('span', { class: 'money-num', text: money.formatWon(c.amount) }),
+          ]),
+          el('div', { class: 'progress' }, [el('span', { style: { width: `${c.percent}%` } })]),
+        ]),
+        el('span', { class: 'cat-pct', text: `${c.percent}%` }),
+      ]));
+    });
+    content.push(list);
+  }
+
+  /* 날짜별 목록 */
+  if (!rows.length) {
+    content.push(el('div', { class: 'empty' }, [
+      el('span', { class: 'big', text: '🧾' }),
+      el('p', { text: '이 달에 기록한 내역이 없습니다.' }),
+      el('p', { text: '아래 ＋ 버튼으로 오늘 쓴 돈을 적어 보세요.' }),
+    ]));
+  } else {
+    content.push(section('전체 내역', rows.length));
+    const wrap = el('div', { class: 'card-list' });
+    money.groupByDate(rows).forEach((day) => {
+      wrap.append(el('div', { class: 'day-head' }, [
+        el('span', { text: day.label }),
+        el('span', { class: 'money-num', text: money.formatWon(day.spent) }),
+      ]));
+      day.rows.forEach((r) => wrap.append(expenseRow(r)));
+    });
+    content.push(wrap);
+  }
+
+  return [header, content];
+}
+
+function statTile(label, value, sub, kind) {
+  return el('div', { class: `stat-tile ${kind}` }, [
+    el('div', { class: 'stat-label', text: label }),
+    el('div', { class: 'stat-value', text: value }),
+    el('div', { class: 'stat-sub', text: sub }),
+  ]);
+}
+
+function expenseRow(r) {
+  const cat = money.categoryInfo(r.category, r.type);
+  const isIncome = r.type === 'income';
+  return el('button', {
+    type: 'button',
+    class: 'expense-row',
+    onclick: async () => { await openExpenseEditor(r); },
+  }, [
+    el('span', { class: 'ex-emoji', text: cat.emoji }),
+    el('div', { class: 'ex-body' }, [
+      el('div', { class: 'ex-title', text: r.memo || cat.label }),
+      el('div', { class: 'ex-meta' }, [
+        el('span', { class: 'chip', text: money.methodInfo(r.method).label }),
+        r.memo ? el('span', { class: 'chip', text: cat.label }) : null,
+      ]),
+    ]),
+    el('span', {
+      class: 'ex-amount money-num' + (isIncome ? ' income' : ''),
+      text: isIncome ? money.formatWon(r.amount, { sign: true }) : money.formatWon(r.amount),
+    }),
+  ]);
+}
+
+async function createExpense(defaults = {}) {
+  const saved = await openExpenseEditor(null, defaults);
+  if (saved) toast('기록했습니다.');
+}
+
 /* ---------------- 검색 ---------------- */
 
 function openSearch() {
@@ -887,7 +1044,7 @@ async function renderSettings() {
   }));
   dataGroup.append(settingsRow({
     label: '저장 공간',
-    desc: `항목 ${items.length}개 · 사진 ${bytesToText(photoBytes)}`
+    desc: `항목 ${items.length}개 · 가계부 ${(await money.getAll()).length}건 · 사진 ${bytesToText(photoBytes)}`
       + (est ? ` · 앱 전체 ${bytesToText(est.usage)}${est.quota ? ` / ${bytesToText(est.quota)}` : ''}` : ''),
   }));
   dataGroup.append(settingsRow({
@@ -1065,7 +1222,7 @@ function importData() {
         media.releasePhotoURLs();
       }
       const n = await store.importBackup(data, mode);
-      toast(`항목 ${n.items}개, 폴더 ${n.folders}개, 사진 ${n.photos}장을 가져왔습니다.`);
+      toast(`항목 ${n.items}개, 폴더 ${n.folders}개, 가계부 ${n.expenses}건, 사진 ${n.photos}장을 가져왔습니다.`);
       render();
     } catch (e) {
       console.error(e);

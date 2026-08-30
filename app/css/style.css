@@ -268,7 +268,7 @@ main {
   left: 0; right: 0; bottom: 0;
   z-index: 30;
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(6, 1fr);
   background: color-mix(in srgb, var(--bg-elev) 92%, transparent);
   backdrop-filter: saturate(160%) blur(14px);
   -webkit-backdrop-filter: saturate(160%) blur(14px);
@@ -284,8 +284,9 @@ main {
   justify-content: center;
   gap: 3px;
   color: var(--text-dim);
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 600;
+  letter-spacing: -0.3px;
 }
 
 .tabbar button .ico { display: flex; align-items: center; justify-content: center; height: 23px; }
@@ -684,6 +685,164 @@ main {
   padding: 0 12px;
 }
 .chip.tap:active { background: var(--accent-soft); color: var(--accent-ink); }
+
+/* ---------------- 가계부 ---------------- */
+
+.money-num { font-variant-numeric: tabular-nums; font-weight: 700; }
+.money-num.income { color: var(--ok); }
+
+.stat-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.stat-tile {
+  background: var(--bg-elev);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+  padding: 12px 10px;
+  text-align: center;
+  min-width: 0;
+}
+.stat-tile.today { border-color: var(--accent); }
+.stat-label { font-size: 11.5px; font-weight: 700; color: var(--text-dim); }
+.stat-value {
+  font-size: 16px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.4px;
+  margin: 5px 0 3px;
+  word-break: keep-all;
+}
+.stat-tile.today .stat-value { color: var(--accent-ink); }
+.stat-sub { font-size: 10.5px; color: var(--text-faint); }
+
+.day-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 14px 4px 6px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text-dim);
+  border-bottom: 1px solid var(--line-soft);
+  margin-bottom: 2px;
+}
+
+.expense-row {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  width: 100%;
+  text-align: left;
+  padding: 11px 14px;
+  background: var(--bg-elev);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+}
+.expense-row:active { background: var(--bg-elev-2); }
+.ex-emoji { font-size: 20px; flex: none; }
+.ex-body { flex: 1; min-width: 0; }
+.ex-title {
+  font-size: 14.5px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ex-meta { display: flex; gap: 5px; margin-top: 4px; flex-wrap: wrap; }
+.ex-meta .chip { font-size: 10.5px; padding: 1px 7px; }
+.ex-amount { flex: none; font-size: 15px; }
+
+.cat-list { display: flex; flex-direction: column; gap: 10px; }
+.cat-row { display: flex; align-items: center; gap: 10px; }
+.cat-emoji { font-size: 18px; flex: none; }
+.cat-body { flex: 1; min-width: 0; }
+.cat-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 13px;
+  margin-bottom: 5px;
+}
+.cat-pct {
+  flex: none;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-dim);
+  min-width: 34px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 오늘 화면의 '오늘 쓴 돈' 줄 */
+.today-money {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  padding: 13px 16px;
+  background: var(--bg-elev);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+  margin-bottom: 4px;
+}
+.today-money:active { background: var(--bg-elev-2); }
+.tm-label { font-size: 13.5px; font-weight: 600; color: var(--text-dim); }
+.tm-value { flex: 1; font-size: 17px; text-align: right; }
+.tm-sub { font-size: 12px; color: var(--text-faint); flex: none; }
+
+/* 금액 입력 */
+.amount-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg-input);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding-right: 14px;
+}
+.amount-row:focus-within { border-color: var(--accent); }
+.amount-input {
+  border: none !important;
+  background: none !important;
+  font-size: 26px !important;
+  font-weight: 800;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.5px;
+}
+.amount-input.income { color: var(--ok); }
+.amount-row .won { font-size: 16px; font-weight: 700; color: var(--text-dim); flex: none; }
+
+/* 결제수단 · 분류 고르기 */
+.pick-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 7px;
+}
+.pick {
+  min-height: 44px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  background: var(--bg-input);
+  color: var(--text-dim);
+  font-size: 13.5px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 0 8px;
+}
+.pick[aria-pressed='true'] {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
 
 /* ---------------- 폼 / 시트 ---------------- */
 

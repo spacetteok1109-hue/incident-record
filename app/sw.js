@@ -1,6 +1,6 @@
 /* sw.js — 오프라인 사용과 백그라운드 알림 확인 */
 
-const CACHE = 'todo-cal-v7';
+const CACHE = 'todo-cal-v8';
 const ASSETS = [
   './',
   './index.html',
@@ -16,6 +16,7 @@ const ASSETS = [
   './js/notify.js',
   './js/lock.js',
   './js/icons.js',
+  './js/money.js',
   './icons/icon-192.png',
   './icons/icon-512.png',
   './icons/icon-maskable-512.png',

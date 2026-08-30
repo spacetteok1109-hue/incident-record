@@ -3,6 +3,7 @@
 import { el, openSheet, toast, confirmDialog, openViewer } from './ui.js';
 import * as store from './store.js';
 import * as media from './media.js';
+import * as money from './money.js';
 import * as db from './db.js';
 import {
   REPEAT_LABELS, REMIND_OPTIONS, todayKey,
@@ -532,4 +533,181 @@ export async function openFolderEditor(folder = null) {
       return store.saveFolder(draft);
     },
   });
+}
+
+
+/* ---------------- 가계부 ---------------- */
+
+/**
+ * 지출/수입 입력 시트.
+ * 금액 칸에 먼저 포커스를 두어 바로 숫자를 칠 수 있게 합니다.
+ */
+export async function openExpenseEditor(row = null, defaults = {}) {
+  const draft = row ? { ...row } : money.blankExpense(defaults);
+
+  return openSheet({
+    title: row ? '내역 수정' : '가계부 입력',
+    confirmLabel: '저장',
+    buildBody: (api) => buildExpenseForm(api, draft, row),
+    onConfirm: async () => {
+      if (!draft.amount || draft.amount <= 0) {
+        toast('금액을 입력해 주세요.');
+        return false;
+      }
+      return money.save(draft);
+    },
+  });
+}
+
+function buildExpenseForm(api, draft, original) {
+  const { body } = api;
+
+  /* 지출 / 수입 */
+  const typeSeg = el('div', { class: 'seg' });
+  [['expense', '지출'], ['income', '수입']].forEach(([value, label]) => {
+    typeSeg.append(el('button', {
+      type: 'button',
+      text: label,
+      'aria-pressed': String(draft.type === value),
+      onclick: () => {
+        if (draft.type === value) return;
+        draft.type = value;
+        draft.category = money.categoriesFor(value)[0].value;
+        if (value === 'income' && (draft.method === 'credit' || draft.method === 'debit')) {
+          draft.method = 'transfer';
+        }
+        [...typeSeg.children].forEach((b, i) =>
+          b.setAttribute('aria-pressed', String(['expense', 'income'][i] === draft.type)));
+        renderCategories();
+        renderMethods();
+        amountInput.classList.toggle('income', draft.type === 'income');
+      },
+    }));
+  });
+  body.append(field('종류', typeSeg));
+
+  /* 금액 */
+  const amountInput = el('input', {
+    type: 'text',
+    inputmode: 'numeric',
+    class: 'amount-input' + (draft.type === 'income' ? ' income' : ''),
+    placeholder: '0',
+    'data-autofocus': '',
+    value: draft.amount ? money.formatWon(draft.amount).replace('원', '') : '',
+    oninput: (e) => {
+      const n = money.parseAmount(e.target.value);
+      draft.amount = n;
+      // 입력하는 동안에도 천 단위 쉼표가 보이게 합니다.
+      e.target.value = n ? new Intl.NumberFormat('ko-KR').format(n) : '';
+    },
+  });
+  const amountWrap = el('div', { class: 'amount-row' }, [amountInput, el('span', { class: 'won', text: '원' })]);
+  body.append(field('금액', amountWrap));
+
+  /* 빠른 금액 */
+  const quick = el('div', { class: 'chip-row' });
+  [1000, 5000, 10000, 30000, 50000].forEach((n) => {
+    quick.append(el('button', {
+      type: 'button', class: 'chip tap', text: `+${new Intl.NumberFormat('ko-KR').format(n)}`,
+      onclick: () => {
+        draft.amount = (draft.amount || 0) + n;
+        amountInput.value = new Intl.NumberFormat('ko-KR').format(draft.amount);
+      },
+    }));
+  });
+  quick.append(el('button', {
+    type: 'button', class: 'chip tap', text: '지우기',
+    onclick: () => { draft.amount = 0; amountInput.value = ''; },
+  }));
+  body.append(quick);
+
+  /* 날짜 */
+  body.append(field('날짜', el('input', {
+    type: 'date',
+    value: draft.date,
+    onchange: (e) => { draft.date = e.target.value || todayKey(); },
+  })));
+
+  /* 결제수단 */
+  const methodWrap = el('div', { class: 'pick-grid' });
+  const methodField = field('결제수단', methodWrap);
+  body.append(methodField);
+
+  function renderMethods() {
+    methodWrap.replaceChildren();
+    const usable = draft.type === 'income'
+      ? money.METHODS.filter((m) => m.value === 'cash' || m.value === 'transfer')
+      : money.METHODS;
+    usable.forEach((m) => {
+      methodWrap.append(el('button', {
+        type: 'button',
+        class: 'pick',
+        text: m.label,
+        'aria-pressed': String(draft.method === m.value),
+        onclick: () => {
+          draft.method = m.value;
+          [...methodWrap.children].forEach((b) =>
+            b.setAttribute('aria-pressed', String(b.textContent === m.label)));
+        },
+      }));
+    });
+  }
+  renderMethods();
+
+  /* 분류 */
+  const catWrap = el('div', { class: 'pick-grid' });
+  body.append(field('분류', catWrap));
+
+  function renderCategories() {
+    catWrap.replaceChildren();
+    money.categoriesFor(draft.type).forEach((c) => {
+      catWrap.append(el('button', {
+        type: 'button',
+        class: 'pick',
+        'aria-pressed': String(draft.category === c.value),
+        dataset: { value: c.value },
+        onclick: () => {
+          draft.category = c.value;
+          [...catWrap.children].forEach((b) =>
+            b.setAttribute('aria-pressed', String(b.dataset.value === c.value)));
+        },
+      }, [
+        el('span', { text: c.emoji }),
+        el('span', { text: c.label }),
+      ]));
+    });
+  }
+  renderCategories();
+
+  /* 메모 */
+  const memo = el('input', {
+    type: 'text',
+    placeholder: '어디에 썼는지 적어 두세요',
+    maxlength: '100',
+    value: draft.memo || '',
+    oninput: (e) => { draft.memo = e.target.value; },
+  });
+  body.append(field('메모', memo));
+
+  /* 삭제 */
+  if (original) {
+    body.append(el('button', {
+      type: 'button',
+      class: 'btn danger',
+      text: '이 내역 삭제',
+      style: { marginTop: '6px' },
+      onclick: async () => {
+        const ok = await confirmDialog({
+          title: '내역 삭제',
+          message: `${money.formatWon(original.amount)} 내역을 삭제할까요?`,
+          confirmLabel: '삭제',
+          danger: true,
+        });
+        if (!ok) return;
+        await money.remove(original.id);
+        toast('삭제했습니다.');
+        api.close(null);
+      },
+    }));
+  }
 }
