@@ -20,7 +20,17 @@ const state = {
   selectedDate: todayKey(),
   reportMonth: monthKey(),
   theme: 'auto',
+  fontScale: 1,
 };
+
+/** 글씨 크기 단계. 화면 전체가 이 배율로 커집니다. */
+const FONT_STEPS = [
+  { value: 0.9, label: '작게' },
+  { value: 1, label: '보통' },
+  { value: 1.15, label: '크게' },
+  { value: 1.3, label: '아주 크게' },
+  { value: 1.45, label: '가장 크게' },
+];
 
 const main = () => $('#view');
 
@@ -31,6 +41,8 @@ const main = () => $('#view');
 async function boot() {
   state.theme = localStorage.getItem('theme') || 'auto';
   applyTheme(state.theme);
+  state.fontScale = readFontScale();
+  applyFontScale(state.fontScale);
 
   if (await lock.isEnabled()) await showLockScreen();
 
@@ -1045,6 +1057,12 @@ async function renderSettings() {
     { value: 'dark', label: '어둡게' },
   ];
   th.append(settingsRow({
+    label: '글씨 크기',
+    desc: '앱 전체 글씨와 버튼이 함께 커집니다.',
+    value: fontLabel(state.fontScale),
+    onclick: fontSizeSheet,
+  }));
+  th.append(settingsRow({
     label: '테마',
     value: THEMES.find((t) => t.value === state.theme)?.label,
     onclick: async () => {
@@ -1074,6 +1092,85 @@ async function renderSettings() {
   }));
 
   return [header, content];
+}
+
+/** 저장해 둔 글씨 크기를 읽습니다. 이상한 값이면 '보통'으로 되돌립니다. */
+function readFontScale() {
+  const saved = Number(localStorage.getItem('fontScale'));
+  return FONT_STEPS.some((f) => f.value === saved) ? saved : 1;
+}
+
+function applyFontScale(scale) {
+  document.documentElement.style.setProperty('--fs', String(scale));
+}
+
+function fontLabel(scale) {
+  return FONT_STEPS.find((f) => f.value === scale)?.label || '보통';
+}
+
+/**
+ * 글씨 크기 고르기.
+ * 누르는 즉시 화면 전체에 적용해서, 어느 정도로 커지는지 바로 보이게 합니다.
+ */
+function fontSizeSheet() {
+  const before = state.fontScale;
+  let picked = before;
+
+  return openSheet({
+    title: '글씨 크기',
+    confirmLabel: '완료',
+    buildBody: ({ body }) => {
+      body.append(el('p', {
+        text: '단계를 누르면 뒤에 있는 화면이 바로 바뀝니다. 편한 크기를 고르고 완료를 누르세요.',
+        style: { margin: '2px 0 4px', fontSize: '13.5px', color: 'var(--text-dim)', lineHeight: '1.55' },
+      }));
+
+      // 단계마다 '가' 를 실제 비율대로 보여 줍니다. 글자로 읽는 것보다 빠릅니다.
+      const seg = el('div', { class: 'seg fs-seg' });
+      const now = el('div', { class: 'fs-now' });
+      const sample = el('div', { class: 'person-card', style: { pointerEvents: 'none' } }, [
+        el('div', { class: 'p-head' }, [
+          el('span', { class: 'p-name', text: '김철수' }),
+          el('span', { class: 'chip', text: '🚗 자차' }),
+          el('span', { style: { flex: '1' } }),
+          el('span', { class: 'p-count', text: '3일' }),
+        ]),
+        el('div', { class: 'p-sub' }, [
+          el('span', { text: '일당 190,000' }),
+          el('span', { text: '1968년생' }),
+        ]),
+      ]);
+
+      const render = () => {
+        seg.textContent = '';
+        FONT_STEPS.forEach((f, i) => {
+          seg.append(el('button', {
+            type: 'button',
+            'aria-label': f.label,
+            'aria-pressed': f.value === picked ? 'true' : 'false',
+            // 배율과 무관한 고정 크기라, 미리보기 중에도 이 줄은 흔들리지 않습니다.
+            style: { fontSize: `${13 + i * 2}px` },
+            text: '가',
+            onclick: () => { picked = f.value; applyFontScale(picked); render(); },
+          }));
+        });
+        now.textContent = fontLabel(picked);
+      };
+      render();
+
+      body.append(seg, now, el('div', { class: 'section-title', text: '이렇게 보입니다' }), sample);
+    },
+    onConfirm: () => {
+      state.fontScale = picked;
+      localStorage.setItem('fontScale', String(picked));
+      return picked;
+    },
+  }).then((result) => {
+    // 취소하면 원래 크기로 되돌립니다.
+    if (result === null) applyFontScale(before);
+    render();
+    return result;
+  });
 }
 
 function applyTheme(theme) {
