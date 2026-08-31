@@ -25,10 +25,12 @@
   --ok: #3fb27f;
   --radius: 14px;
   --radius-sm: 10px;
-  --tap: 44px;
+  /* 글씨 크기 배율. 설정에서 바꾸면 html 에 직접 지정됩니다. */
+  --fs: 1;
+  --tap: calc(44px * var(--fs));
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
-  --tabbar-h: 58px;
+  --tabbar-h: calc(58px * var(--fs));
   --shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
 }
 
@@ -91,7 +93,7 @@ body {
   color: var(--text);
   font-family: -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Pretendard',
     'Noto Sans KR', 'Malgun Gothic', 'Segoe UI', Roboto, sans-serif;
-  font-size: 16px;
+  font-size: calc(16px * var(--fs));
   line-height: 1.45;
   -webkit-font-smoothing: antialiased;
 }
@@ -135,7 +137,7 @@ button { cursor: pointer; border: none; background: none; padding: 0; }
 
 .topbar h1 {
   margin: 0;
-  font-size: 21px;
+  font-size: calc(21px * var(--fs));
   font-weight: 700;
   letter-spacing: -0.3px;
   flex: 1;
@@ -147,7 +149,7 @@ button { cursor: pointer; border: none; background: none; padding: 0; }
 
 .topbar .sub {
   display: block;
-  font-size: 12px;
+  font-size: calc(12px * var(--fs));
   font-weight: 500;
   color: var(--text-dim);
   letter-spacing: 0;
@@ -161,7 +163,7 @@ button { cursor: pointer; border: none; background: none; padding: 0; }
   border-radius: 12px;
   color: var(--text-dim);
   flex: none;
-  font-size: 20px;
+  font-size: calc(20px * var(--fs));
 }
 .icon-btn:active { background: var(--bg-elev-2); }
 .icon-btn.active { color: var(--accent-ink); }
@@ -201,11 +203,11 @@ main {
   justify-content: center;
   gap: 3px;
   color: var(--text-faint);
-  font-size: 11px;
+  font-size: calc(11px * var(--fs));
   font-weight: 600;
 }
 
-.tabbar button .ico { font-size: 20px; line-height: 1; }
+.tabbar button .ico { font-size: calc(20px * var(--fs)); line-height: 1; }
 .tabbar button[aria-selected='true'] { color: var(--accent-ink); }
 
 /* ---------------- 추가 버튼 (FAB) ---------------- */
@@ -220,7 +222,7 @@ main {
   border-radius: 50%;
   background: var(--accent);
   color: #fff;
-  font-size: 30px;
+  font-size: calc(30px * var(--fs));
   line-height: 1;
   display: grid;
   place-items: center;
@@ -236,7 +238,7 @@ main {
   align-items: center;
   gap: 8px;
   margin: 20px 2px 8px;
-  font-size: 13px;
+  font-size: calc(13px * var(--fs));
   font-weight: 700;
   color: var(--text-dim);
   letter-spacing: 0.2px;
@@ -247,7 +249,7 @@ main {
   color: var(--text-dim);
   border-radius: 999px;
   padding: 1px 8px;
-  font-size: 11px;
+  font-size: calc(11px * var(--fs));
 }
 .section-title.warn { color: var(--danger); }
 
@@ -285,7 +287,7 @@ main {
   display: grid;
   place-items: center;
   color: transparent;
-  font-size: 14px;
+  font-size: calc(14px * var(--fs));
   transition: background 0.12s, border-color 0.12s;
 }
 .check[aria-checked='true'] {
@@ -298,7 +300,7 @@ main {
 .item-body { flex: 1; min-width: 0; }
 
 .item-title {
-  font-size: 15.5px;
+  font-size: calc(15.5px * var(--fs));
   font-weight: 600;
   word-break: break-word;
   margin: 0 0 2px;
@@ -310,7 +312,7 @@ main {
   flex-wrap: wrap;
   align-items: center;
   gap: 6px;
-  font-size: 12px;
+  font-size: calc(12px * var(--fs));
   color: var(--text-dim);
   margin-top: 4px;
 }
@@ -322,7 +324,7 @@ main {
   padding: 2px 8px;
   border-radius: 999px;
   background: var(--bg-elev-2);
-  font-size: 11.5px;
+  font-size: calc(11.5px * var(--fs));
   font-weight: 600;
   white-space: nowrap;
 }
@@ -359,7 +361,7 @@ main {
   display: flex;
   gap: 8px;
   align-items: center;
-  font-size: 13.5px;
+  font-size: calc(13.5px * var(--fs));
   color: var(--text-dim);
 }
 .mini-checks li .box {
@@ -367,7 +369,7 @@ main {
   border: 1.5px solid var(--line);
   border-radius: 5px;
   display: grid; place-items: center;
-  font-size: 11px; color: transparent;
+  font-size: calc(11px * var(--fs)); color: transparent;
 }
 .mini-checks li.on .box { background: var(--accent); border-color: var(--accent); color: #fff; }
 .mini-checks li.on span.txt { text-decoration: line-through; opacity: 0.65; }
@@ -386,7 +388,7 @@ main {
   border-radius: 8px;
   background: var(--bg-elev-2);
   display: grid; place-items: center;
-  font-size: 12px; color: var(--text-dim);
+  font-size: calc(12px * var(--fs)); color: var(--text-dim);
 }
 
 .empty {
@@ -394,8 +396,8 @@ main {
   padding: 48px 20px;
   color: var(--text-faint);
 }
-.empty .big { font-size: 42px; display: block; margin-bottom: 10px; }
-.empty p { margin: 4px 0; font-size: 14px; }
+.empty .big { font-size: calc(42px * var(--fs)); display: block; margin-bottom: 10px; }
+.empty p { margin: 4px 0; font-size: calc(14px * var(--fs)); }
 
 /* ---------------- 달력 ---------------- */
 
@@ -408,20 +410,20 @@ main {
 .cal-head .month {
   flex: 1;
   text-align: center;
-  font-size: 17px;
+  font-size: calc(17px * var(--fs));
   font-weight: 700;
 }
 .cal-head button {
   width: 40px; height: 40px;
   border-radius: 10px;
   color: var(--text-dim);
-  font-size: 18px;
+  font-size: calc(18px * var(--fs));
 }
 .cal-head button:active { background: var(--bg-elev-2); }
 .cal-head .today-btn {
   width: auto; padding: 0 12px; height: 34px;
   border: 1px solid var(--line);
-  font-size: 13px; font-weight: 600;
+  font-size: calc(13px * var(--fs)); font-weight: 600;
   color: var(--text-dim);
 }
 
@@ -429,7 +431,7 @@ main {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
   text-align: center;
-  font-size: 11.5px;
+  font-size: calc(11.5px * var(--fs));
   font-weight: 700;
   color: var(--text-faint);
   padding-bottom: 6px;
@@ -449,18 +451,18 @@ main {
 
 .cal-cell {
   background: var(--bg-elev);
-  min-height: 58px;
+  min-height: calc(58px * var(--fs));
   padding: 5px 3px 4px;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 3px;
-  font-size: 13px;
+  font-size: calc(13px * var(--fs));
   position: relative;
 }
 .cal-cell.out { background: var(--bg); color: var(--text-faint); }
 .cal-cell .num {
-  width: 25px; height: 25px;
+  width: calc(25px * var(--fs)); height: calc(25px * var(--fs));
   display: grid; place-items: center;
   border-radius: 50%;
   font-weight: 600;
@@ -482,13 +484,13 @@ main {
 
 .day-panel { margin-top: 16px; }
 .day-panel h2 {
-  font-size: 15px;
+  font-size: calc(15px * var(--fs));
   margin: 0 2px 10px;
   display: flex;
   align-items: center;
   gap: 8px;
 }
-.day-panel h2 .dday-tag { font-size: 12px; color: var(--text-dim); font-weight: 600; }
+.day-panel h2 .dday-tag { font-size: calc(12px * var(--fs)); color: var(--text-dim); font-weight: 600; }
 
 /* ---------------- 폴더 ---------------- */
 
@@ -517,13 +519,13 @@ main {
   width: 4px;
   background: var(--fc, var(--accent));
 }
-.folder-card .emoji { font-size: 26px; }
-.folder-card .name { font-weight: 700; font-size: 15px; word-break: break-word; }
-.folder-card .stat { font-size: 12px; color: var(--text-dim); }
+.folder-card .emoji { font-size: calc(26px * var(--fs)); }
+.folder-card .name { font-weight: 700; font-size: calc(15px * var(--fs)); word-break: break-word; }
+.folder-card .stat { font-size: calc(12px * var(--fs)); color: var(--text-dim); }
 .folder-card .edit {
   position: absolute; top: 6px; right: 6px;
   width: 34px; height: 34px; border-radius: 9px;
-  color: var(--text-faint); font-size: 15px;
+  color: var(--text-faint); font-size: calc(15px * var(--fs));
   display: grid; place-items: center;
 }
 
@@ -541,7 +543,7 @@ main {
   overflow: hidden;
 }
 .dday-card .big {
-  font-size: 26px;
+  font-size: calc(26px * var(--fs));
   font-weight: 800;
   letter-spacing: -0.5px;
   font-variant-numeric: tabular-nums;
@@ -552,8 +554,8 @@ main {
 .dday-card.past .big { color: var(--text-faint); }
 .dday-card.today .big { color: var(--warn); }
 .dday-card .info { flex: 1; min-width: 0; }
-.dday-card .info .t { font-weight: 700; font-size: 15.5px; word-break: break-word; }
-.dday-card .info .d { font-size: 12.5px; color: var(--text-dim); margin-top: 2px; }
+.dday-card .info .t { font-weight: 700; font-size: calc(15.5px * var(--fs)); word-break: break-word; }
+.dday-card .info .d { font-size: calc(12.5px * var(--fs)); color: var(--text-dim); margin-top: 2px; }
 .dday-card img.cover {
   width: 100%; height: 120px; object-fit: cover;
 }
@@ -571,7 +573,7 @@ main {
 .dday-card .period-line .pct { font-weight: 700; color: var(--accent-ink); }
 
 .check-count {
-  font-size: 12px;
+  font-size: calc(12px * var(--fs));
   font-weight: 700;
   color: var(--text-dim);
   margin-top: 10px;
@@ -583,7 +585,7 @@ main {
 
 /* 편집 화면의 계산 결과 안내 */
 .hint {
-  font-size: 12.5px;
+  font-size: calc(12.5px * var(--fs));
   line-height: 1.6;
   color: var(--text-dim);
   background: var(--bg-elev-2);
@@ -644,12 +646,12 @@ main {
   border-bottom: 1px solid var(--line-soft);
   flex: none;
 }
-.sheet-head h2 { margin: 0; font-size: 16px; font-weight: 700; flex: 1; text-align: center; }
+.sheet-head h2 { margin: 0; font-size: calc(16px * var(--fs)); font-weight: 700; flex: 1; text-align: center; }
 .sheet-head button {
   min-width: 60px;
   height: 38px;
   border-radius: 10px;
-  font-size: 14.5px;
+  font-size: calc(14.5px * var(--fs));
   font-weight: 600;
   color: var(--text-dim);
   padding: 0 10px;
@@ -667,7 +669,7 @@ main {
 }
 
 .field { display: flex; flex-direction: column; gap: 6px; }
-.field > label { font-size: 12.5px; font-weight: 700; color: var(--text-dim); }
+.field > label { font-size: calc(12.5px * var(--fs)); font-weight: 700; color: var(--text-dim); }
 
 input[type='text'], input[type='date'], input[type='time'],
 input[type='number'], input[type='password'], textarea, select {
@@ -693,7 +695,7 @@ select {
 }
 
 .title-input {
-  font-size: 17px !important;
+  font-size: calc(17px * var(--fs)) !important;
   font-weight: 600;
 }
 
@@ -712,7 +714,7 @@ select {
 .seg button {
   height: 38px;
   border-radius: 9px;
-  font-size: 13.5px;
+  font-size: calc(13.5px * var(--fs));
   font-weight: 600;
   color: var(--text-dim);
 }
@@ -725,8 +727,8 @@ select {
   gap: 12px;
   min-height: var(--tap);
 }
-.switch-row .label { font-size: 14.5px; }
-.switch-row .desc { font-size: 12px; color: var(--text-dim); margin-top: 2px; }
+.switch-row .label { font-size: calc(14.5px * var(--fs)); }
+.switch-row .desc { font-size: calc(12px * var(--fs)); color: var(--text-dim); margin-top: 2px; }
 
 .switch {
   flex: none;
@@ -757,7 +759,7 @@ select {
   border: 2px solid var(--line);
   border-radius: 7px;
   display: grid; place-items: center;
-  font-size: 12px; color: transparent;
+  font-size: calc(12px * var(--fs)); color: transparent;
 }
 .check-row .box[aria-checked='true'] { background: var(--accent); border-color: var(--accent); color: #fff; }
 .check-row input { flex: 1; min-height: 40px; padding: 8px 10px; }
@@ -768,7 +770,7 @@ select {
   border-radius: var(--radius-sm);
   min-height: 42px;
   color: var(--text-dim);
-  font-size: 14px;
+  font-size: calc(14px * var(--fs));
   font-weight: 600;
   width: 100%;
   display: flex; align-items: center; justify-content: center; gap: 6px;
@@ -780,7 +782,7 @@ select {
   background: var(--bg-elev-2);
   color: var(--text);
   font-weight: 600;
-  font-size: 14.5px;
+  font-size: calc(14.5px * var(--fs));
   padding: 0 16px;
   display: inline-flex;
   align-items: center;
@@ -811,7 +813,7 @@ select {
   position: absolute; top: 4px; right: 4px;
   width: 26px; height: 26px; border-radius: 50%;
   background: rgba(0, 0, 0, 0.62); color: #fff;
-  display: grid; place-items: center; font-size: 13px;
+  display: grid; place-items: center; font-size: calc(13px * var(--fs));
 }
 .photo-add {
   aspect-ratio: 1;
@@ -821,9 +823,9 @@ select {
   align-items: center; justify-content: center;
   gap: 4px;
   color: var(--text-dim);
-  font-size: 11.5px;
+  font-size: calc(11.5px * var(--fs));
 }
-.photo-add .ico { font-size: 22px; }
+.photo-add .ico { font-size: calc(22px * var(--fs)); }
 
 /* 색상 선택 */
 .color-row { display: flex; gap: 10px; flex-wrap: wrap; }
@@ -838,7 +840,7 @@ select {
   width: 40px; height: 40px;
   border-radius: 10px;
   background: var(--bg-elev-2);
-  font-size: 19px;
+  font-size: calc(19px * var(--fs));
   display: grid; place-items: center;
   border: 2px solid transparent;
 }
@@ -855,7 +857,7 @@ select {
 }
 .settings-group > .head {
   padding: 12px 14px 8px;
-  font-size: 12.5px;
+  font-size: calc(12.5px * var(--fs));
   font-weight: 700;
   color: var(--text-dim);
 }
@@ -870,9 +872,9 @@ select {
   text-align: left;
 }
 .settings-row .grow { flex: 1; min-width: 0; }
-.settings-row .label { font-size: 14.5px; font-weight: 500; }
-.settings-row .desc { font-size: 12px; color: var(--text-dim); margin-top: 2px; line-height: 1.4; }
-.settings-row .value { font-size: 13px; color: var(--text-faint); }
+.settings-row .label { font-size: calc(14.5px * var(--fs)); font-weight: 500; }
+.settings-row .desc { font-size: calc(12px * var(--fs)); color: var(--text-dim); margin-top: 2px; line-height: 1.4; }
+.settings-row .value { font-size: calc(13px * var(--fs)); color: var(--text-faint); }
 .settings-row.danger .label { color: var(--danger); }
 
 .notice {
@@ -880,14 +882,14 @@ select {
   border: 1px solid var(--notice-line);
   border-radius: var(--radius);
   padding: 12px 14px;
-  font-size: 13px;
+  font-size: calc(13px * var(--fs));
   line-height: 1.55;
   color: var(--text);
   margin-bottom: 14px;
   display: flex;
   gap: 10px;
 }
-.notice .ico { font-size: 17px; flex: none; }
+.notice .ico { font-size: calc(17px * var(--fs)); flex: none; }
 .notice.warn { background: rgba(224, 162, 58, 0.13); border-color: rgba(224, 162, 58, 0.35); }
 .notice button { color: var(--accent-ink); font-weight: 700; text-decoration: underline; }
 
@@ -905,27 +907,27 @@ select {
   gap: 22px;
   padding: 24px;
 }
-.lock-screen .lock-ico { font-size: 44px; }
-.lock-screen h2 { margin: 0; font-size: 18px; }
+.lock-screen .lock-ico { font-size: calc(44px * var(--fs)); }
+.lock-screen h2 { margin: 0; font-size: calc(18px * var(--fs)); }
 .lock-dots { display: flex; gap: 12px; height: 16px; }
 .lock-dots i {
   width: 14px; height: 14px; border-radius: 50%;
   border: 2px solid var(--line); display: block;
 }
 .lock-dots i.on { background: var(--accent); border-color: var(--accent); }
-.lock-error { color: var(--danger); font-size: 13px; min-height: 18px; }
+.lock-error { color: var(--danger); font-size: calc(13px * var(--fs)); min-height: 18px; }
 
 .keypad {
   display: grid;
-  grid-template-columns: repeat(3, 76px);
+  grid-template-columns: repeat(3, calc(76px * var(--fs)));
   gap: 14px;
 }
 .keypad button {
-  height: 66px;
+  height: calc(66px * var(--fs));
   border-radius: 50%;
   background: var(--bg-elev);
   border: 1px solid var(--line-soft);
-  font-size: 24px;
+  font-size: calc(24px * var(--fs));
   font-weight: 500;
 }
 .keypad button:active { background: var(--bg-elev-2); }
@@ -950,7 +952,7 @@ select {
   color: var(--text);
   border-radius: 12px;
   padding: 11px 16px;
-  font-size: 14px;
+  font-size: calc(14px * var(--fs));
   box-shadow: var(--shadow);
   max-width: 520px;
   animation: toastin 0.18s ease;
@@ -977,7 +979,7 @@ select {
   top: calc(var(--safe-top) + 12px); right: 14px;
   width: 42px; height: 42px; border-radius: 50%;
   background: rgba(255, 255, 255, 0.14);
-  color: #fff; font-size: 18px;
+  color: #fff; font-size: calc(18px * var(--fs));
   display: grid; place-items: center;
 }
 
@@ -1009,7 +1011,7 @@ select {
 
 /* 달력 칸의 인원 수 */
 .cal-cell .cnt {
-  font-size: 10px;
+  font-size: calc(10px * var(--fs));
   font-weight: 700;
   color: var(--text-faint);
   line-height: 1;
@@ -1034,7 +1036,7 @@ select {
   min-width: 0;
 }
 .stat .v {
-  font-size: 19px;
+  font-size: calc(19px * var(--fs));
   font-weight: 800;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.3px;
@@ -1042,8 +1044,8 @@ select {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.stat .l { font-size: 11.5px; color: var(--text-dim); margin-top: 3px; font-weight: 600; }
-.stat .l2 { font-size: 10.5px; color: var(--text-faint); margin-top: 1px; }
+.stat .l { font-size: calc(11.5px * var(--fs)); color: var(--text-dim); margin-top: 3px; font-weight: 600; }
+.stat .l2 { font-size: calc(10.5px * var(--fs)); color: var(--text-faint); margin-top: 1px; }
 
 /* ---------------- 합계 카드 ---------------- */
 
@@ -1060,7 +1062,7 @@ select {
   align-items: center;
   gap: 12px;
   padding: 9px 0;
-  font-size: 14px;
+  font-size: calc(14px * var(--fs));
   color: var(--text-dim);
   border-bottom: 1px solid var(--line-soft);
   font-variant-numeric: tabular-nums;
@@ -1069,7 +1071,7 @@ select {
 .sum-row.strong {
   color: var(--text);
   font-weight: 800;
-  font-size: 15.5px;
+  font-size: calc(15.5px * var(--fs));
 }
 
 /* ---------------- 표 ---------------- */
@@ -1090,12 +1092,12 @@ select {
   text-align: left;
 }
 .tbl-head {
-  font-size: 11.5px;
+  font-size: calc(11.5px * var(--fs));
   font-weight: 700;
   color: var(--text-faint);
   background: var(--bg-elev-2);
 }
-.tbl-row { border-top: 1px solid var(--line-soft); font-size: 14px; }
+.tbl-row { border-top: 1px solid var(--line-soft); font-size: calc(14px * var(--fs)); }
 .tbl-row:active { background: var(--bg-elev-2); }
 .tbl-row.total { font-weight: 800; background: var(--bg-elev-2); }
 
@@ -1110,7 +1112,7 @@ select {
   white-space: nowrap;
   text-overflow: ellipsis;
 }
-.c-num { flex: 0 0 52px; text-align: right; color: var(--text-dim); font-size: 13px; }
+.c-num { flex: 0 0 calc(52px * var(--fs)); text-align: right; color: var(--text-dim); font-size: calc(13px * var(--fs)); }
 .c-amt { flex: 1; text-align: right; }
 .c-amt.strong { font-weight: 700; }
 .tbl-head .c-amt, .tbl-head .c-num { color: var(--text-faint); }
@@ -1135,9 +1137,9 @@ select {
   gap: 6px;
   flex-wrap: wrap;
 }
-.p-name { font-size: 16px; font-weight: 700; }
+.p-name { font-size: calc(16px * var(--fs)); font-weight: 700; }
 .p-count {
-  font-size: 14px;
+  font-size: calc(14px * var(--fs));
   font-weight: 800;
   color: var(--accent-ink);
   font-variant-numeric: tabular-nums;
@@ -1147,13 +1149,13 @@ select {
   flex-wrap: wrap;
   gap: 10px;
   margin-top: 5px;
-  font-size: 12.5px;
+  font-size: calc(12.5px * var(--fs));
   color: var(--text-dim);
   font-variant-numeric: tabular-nums;
 }
 .p-addr {
   margin-top: 5px;
-  font-size: 12px;
+  font-size: calc(12px * var(--fs));
   color: var(--text-faint);
   overflow: hidden;
   white-space: nowrap;
@@ -1175,10 +1177,10 @@ select {
   padding: 11px 13px;
   background: var(--bg-elev-2);
 }
-.site-block-head .nm { font-weight: 700; font-size: 14.5px; flex: 1; min-width: 0; }
+.site-block-head .nm { font-weight: 700; font-size: calc(14.5px * var(--fs)); flex: 1; min-width: 0; }
 .site-block-head .amt {
   font-weight: 800;
-  font-size: 13.5px;
+  font-size: calc(13.5px * var(--fs));
   font-variant-numeric: tabular-nums;
 }
 .site-block .addr {
@@ -1186,7 +1188,7 @@ select {
   width: 100%;
   text-align: left;
   padding: 8px 13px;
-  font-size: 12px;
+  font-size: calc(12px * var(--fs));
   color: var(--accent-ink);
   border-bottom: 1px solid var(--line-soft);
 }
@@ -1199,14 +1201,14 @@ select {
   text-align: left;
   padding: 11px 13px;
   border-top: 1px solid var(--line-soft);
-  font-size: 14px;
+  font-size: calc(14px * var(--fs));
   font-variant-numeric: tabular-nums;
 }
 .work-row:first-child { border-top: none; }
 .work-row:active { background: var(--bg-elev-2); }
 .work-row .dt {
-  flex: 0 0 62px;
-  font-size: 12.5px;
+  flex: 0 0 calc(62px * var(--fs));
+  font-size: calc(12.5px * var(--fs));
   color: var(--text-dim);
   font-weight: 600;
 }
@@ -1271,7 +1273,7 @@ select {
   height: 38px;
   padding: 0 14px;
   border-radius: 10px;
-  font-size: 14px;
+  font-size: calc(14px * var(--fs));
   font-weight: 600;
   color: var(--text-dim);
 }
@@ -1286,6 +1288,7 @@ select {
 
 /* 문서 자체는 테마와 상관없이 늘 흰 종이입니다. 인쇄물과 똑같이 보이도록. */
 .doc {
+  --fs: 1;   /* 문서는 늘 같은 크기로 — 인쇄물이 흔들리면 안 됩니다 */
   background: #fff;
   color: #16191f;
   max-width: 780px;
@@ -1293,15 +1296,15 @@ select {
   padding: 24px 22px 28px;
   border-radius: 10px;
   box-shadow: 0 6px 24px rgba(0, 0, 0, 0.22);
-  font-size: 13px;
+  font-size: calc(13px * var(--fs));
   line-height: 1.5;
 }
 .doc-head { border-bottom: 2px solid #16191f; padding-bottom: 10px; margin-bottom: 14px; }
-.doc-head h1 { margin: 0; font-size: 20px; letter-spacing: -0.4px; }
-.doc-meta { margin-top: 5px; font-size: 11.5px; color: #5c6472; }
+.doc-head h1 { margin: 0; font-size: calc(20px * var(--fs)); letter-spacing: -0.4px; }
+.doc-meta { margin-top: 5px; font-size: calc(11.5px * var(--fs)); color: #5c6472; }
 
 .doc h2 {
-  font-size: 13.5px;
+  font-size: calc(13.5px * var(--fs));
   margin: 20px 0 7px;
   padding-bottom: 4px;
   border-bottom: 1px solid #d7dbe3;
@@ -1322,16 +1325,16 @@ select {
 .doc-sum > div.hi { border-color: #16191f; border-width: 1.5px; }
 .doc-sum b {
   display: block;
-  font-size: 15px;
+  font-size: calc(15px * var(--fs));
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.4px;
   white-space: nowrap;
 }
 @media (max-width: 420px) {
-  .doc-sum b { font-size: 12.5px; }
+  .doc-sum b { font-size: calc(12.5px * var(--fs)); }
   .doc { padding: 18px 14px 22px; }
 }
-.doc-sum span { font-size: 11px; color: #5c6472; }
+.doc-sum span { font-size: calc(11px * var(--fs)); color: #5c6472; }
 
 .doc-tbl {
   width: 100%;
@@ -1346,7 +1349,7 @@ select {
 }
 .doc-tbl th {
   background: #f1f3f8;
-  font-size: 11.5px;
+  font-size: calc(11.5px * var(--fs));
   font-weight: 700;
   color: #3d4450;
   border-bottom: 1px solid #c9cedb;
@@ -1359,7 +1362,7 @@ select {
   border-bottom: none;
   background: #f7f8fb;
 }
-.doc-note { margin-top: 14px; font-size: 11px; color: #5c6472; }
+.doc-note { margin-top: 14px; font-size: calc(11px * var(--fs)); color: #5c6472; }
 
 /* 표가 좁은 화면을 넘치면 그 표만 가로로 밀립니다. */
 .doc-tbl-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
@@ -1386,4 +1389,14 @@ select {
   .doc-tbl tr { page-break-inside: avoid; }
   .doc h2 { page-break-after: avoid; }
   @page { size: A4 portrait; margin: 14mm; }
+}
+
+/* 글씨 크기 고르기 — '가' 를 실제 비율로 보여 주는 줄 */
+.fs-seg button { height: calc(52px * var(--fs)); font-weight: 700; }
+.fs-now {
+  text-align: center;
+  font-size: calc(13px * var(--fs));
+  font-weight: 700;
+  color: var(--accent-ink);
+  margin-top: -4px;
 }

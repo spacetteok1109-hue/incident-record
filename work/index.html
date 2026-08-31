@@ -23,6 +23,8 @@
       var t = localStorage.getItem('theme') || 'auto';
       if (t === 'auto') t = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
       document.documentElement.setAttribute('data-theme', t);
+      var fs = Number(localStorage.getItem('fontScale'));
+      if (fs >= 0.9 && fs <= 1.45) document.documentElement.style.setProperty('--fs', String(fs));
     } catch (e) { /* 저장을 막아 둔 브라우저 */ }
   </script>
   <link rel="stylesheet" href="./css/style.css" />
