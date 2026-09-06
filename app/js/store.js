@@ -339,9 +339,11 @@ export async function spanningItems(fromKey, toKey, { includeDday = true } = {})
       : (a.startDate < b.startDate ? -1 : 1)));
 }
 
-export async function ddayItems() {
+/** 진행 중인 디데이. 완료 표시한 것은 기본으로 빼고 돌려줍니다. */
+export async function ddayItems({ includeDone = false } = {}) {
   const items = await getItems();
-  const list = items.filter((it) => it.type === 'dday' && it.dueDate);
+  const list = items.filter((it) => it.type === 'dday' && it.dueDate
+    && (includeDone || !it.done));
   const today = todayKey();
   return list.sort((a, b) => {
     const af = a.dueDate >= today;
@@ -351,6 +353,14 @@ export async function ddayItems() {
     if (af) return a.dueDate < b.dueDate ? -1 : 1;
     return a.dueDate > b.dueDate ? -1 : 1;
   });
+}
+
+/** 완료 표시한 디데이. 최근에 완료한 것부터. */
+export async function doneDdayItems() {
+  const items = await getItems();
+  return items
+    .filter((it) => it.type === 'dday' && it.done)
+    .sort((a, b) => (b.doneAt || 0) - (a.doneAt || 0));
 }
 
 export async function upcomingReminders(withinMs = 7 * 86400000) {

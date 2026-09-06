@@ -14,12 +14,13 @@ import {
   relativeDateLabel, diffDays, periodProgress, formatRange, REPEAT_LABELS, bytesToText, debounce,
 } from './util.js';
 
-const APP_VERSION = '2.3.1';
+const APP_VERSION = '2.4.0';
 
 const state = {
   tab: 'calendar',
   cal: { y: new Date().getFullYear(), m: new Date().getMonth() },
   moneyMonth: money.thisMonthKey(),
+  showDoneDday: false,
   selectedDate: todayKey(),
   folderId: null,
   settings: { theme: 'auto', hideCompleted: false, showBadge: true, showDdayOnCalendar: true },
@@ -661,28 +662,68 @@ async function renderFolders() {
 
 async function renderDday() {
   const list = await store.ddayItems();
+  const done = await store.doneDdayItems();
+
   const header = [
     title('디데이', `${list.length}개`),
     iconBtn('plus', '디데이 추가', () => createItem({ type: 'dday' })),
   ];
   const content = [];
+
   if (!list.length) {
     content.push(el('div', { class: 'empty' }, [
       el('span', { class: 'big', text: '🎯' }),
-      el('p', { text: '기념일이나 시험일을 등록해 보세요.' }),
-      el('p', { text: '남은 날짜를 한눈에 볼 수 있습니다.' }),
+      el('p', { text: done.length ? '진행 중인 디데이가 없습니다.' : '기념일이나 시험일을 등록해 보세요.' }),
+      el('p', { text: done.length ? '아래에서 완료한 디데이를 볼 수 있습니다.' : '남은 날짜를 한눈에 볼 수 있습니다.' }),
     ]));
   } else {
     const wrap = el('div', { class: 'card-list' });
     for (const d of list) wrap.append(await ddayCard(d));
     content.push(wrap);
   }
+
+  // 완료한 디데이는 접어 두고, 눌러서 펼쳐 되돌리거나 지울 수 있습니다.
+  if (done.length) {
+    const open = state.showDoneDday === true;
+    content.push(el('button', {
+      type: 'button',
+      class: 'done-toggle' + (open ? ' open' : ''),
+      onclick: () => { state.showDoneDday = !open; render(); },
+    }, [
+      el('span', { class: 'dt-label', text: `완료함 ${done.length}개` }),
+      el('span', { class: 'dt-arrow', text: open ? '접기 ⌃' : '펼치기 ⌄' }),
+    ]));
+
+    if (open) {
+      const wrap = el('div', { class: 'card-list' });
+      for (const d of done) wrap.append(await ddayCard(d));
+      wrap.append(el('button', {
+        type: 'button',
+        class: 'btn danger',
+        text: `완료한 디데이 ${done.length}개 모두 지우기`,
+        onclick: async () => {
+          const ok = await confirmDialog({
+            title: '완료한 디데이 삭제',
+            message: `완료 표시한 디데이 ${done.length}개를 지울까요? 첨부한 사진도 함께 지워집니다.`,
+            confirmLabel: '삭제',
+            danger: true,
+          });
+          if (!ok) return;
+          for (const d of done) await store.deleteItem(d.id);
+          toast(`${done.length}개를 지웠습니다.`);
+        },
+      }));
+      content.push(wrap);
+    }
+  }
+
   return [header, content];
 }
 
 async function ddayCard(item) {
   const diff = diffDays(todayKey(), item.dueDate);
-  const cls = ['dday-card', diff === 0 ? 'today' : (diff < 0 ? 'past' : '')].filter(Boolean);
+  const cls = ['dday-card', diff === 0 ? 'today' : (diff < 0 ? 'past' : ''),
+    item.done ? 'done' : ''].filter(Boolean);
   const folder = await store.getFolder(item.folderId);
 
   const period = itemPeriod(item);
@@ -734,6 +775,28 @@ async function ddayCard(item) {
   const card = cover
     ? el('article', { class: cls.join(' ') + ' with-photo' }, [cover, el('div', { class: 'row' }, parts)])
     : el('article', { class: cls.join(' ') }, parts);
+
+  // 완료 체크. 완료하면 목록에서 빠지고, 토스트로 되돌릴 수 있습니다.
+  const wasDone = !!item.done;
+  card.append(el('button', {
+    type: 'button',
+    class: 'dday-check',
+    role: 'checkbox',
+    'aria-checked': String(wasDone),
+    'aria-label': wasDone ? '완료 취소' : '완료로 표시',
+    onclick: async (e) => {
+      e.stopPropagation();
+      await store.toggleDone(item.id);
+      if (!wasDone) {
+        toast('완료했습니다. 목록에서 숨겼습니다.', {
+          action: '되돌리기',
+          onAction: () => store.toggleDone(item.id),
+          duration: 6000,
+        });
+      }
+    },
+  }, [icon('check', { size: 15, strokeWidth: 2.6 })]));
+
   card.addEventListener('click', () => editItem(item.id));
   return card;
 }
