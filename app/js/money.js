@@ -245,6 +245,14 @@ export const DEFAULT_CARD = {
   prepaid: {},          // { '2026-08': true } — 회차 키는 마감월
 };
 
+/**
+ * 자주 쓰는 합산·결제 조합. 한 번 누르면 아래 항목이 한꺼번에 채워집니다.
+ * 마감일이 5일이면 회차는 '지난달 6일 ~ 이번달 5일'이 됩니다.
+ */
+export const CARD_PRESETS = [
+  { label: '6일~다음 달 5일 · 18일 결제', closingDay: 5, paymentNextMonth: false, paymentDay: 18 },
+];
+
 export async function getCardSettings() {
   const saved = await db.getMeta('cardSettings', null);
   return { ...DEFAULT_CARD, ...(saved || {}), prepaid: { ...(saved?.prepaid || {}) } };
