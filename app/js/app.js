@@ -14,7 +14,7 @@ import {
   relativeDateLabel, diffDays, periodProgress, formatRange, REPEAT_LABELS, bytesToText, debounce,
 } from './util.js';
 
-const APP_VERSION = '2.4.0';
+const APP_VERSION = '2.4.1';
 
 const state = {
   tab: 'calendar',
@@ -1031,11 +1031,15 @@ async function openCardSettings() {
         el('span', { class: 'strong', text: '마감일까지 쓴 금액이 그 다음 결제일에 빠져나갑니다.' }),
       ]));
 
+      // 자주 쓰는 조합은 한 번 눌러서 채웁니다.
+      const presetRow = el('div', { class: 'chip-row' });
+      body.append(presetRow);
+
       const closeSel = el('select', {
         onchange: (e) => { draft.closingDay = Number(e.target.value); },
       }, [
         el('option', { value: '0', text: '말일', selected: Number(draft.closingDay) === 0 }),
-        ...[10, 12, 14, 15, 17, 20, 25].map((d) => el('option', {
+        ...[5, 10, 12, 14, 15, 17, 20, 25].map((d) => el('option', {
           value: String(d), text: `${d}일`, selected: Number(draft.closingDay) === d,
         })),
       ]);
@@ -1049,7 +1053,7 @@ async function openCardSettings() {
       ]);
       const daySel = el('select', {
         onchange: (e) => { draft.paymentDay = Number(e.target.value); },
-      }, [1, 5, 10, 12, 13, 14, 15, 17, 20, 21, 23, 25, 27].map((d) => el('option', {
+      }, [1, 5, 10, 12, 13, 14, 15, 17, 18, 20, 21, 23, 25, 27].map((d) => el('option', {
         value: String(d), text: `${d}일`, selected: Number(draft.paymentDay) === d,
       })));
       body.append(el('div', { class: 'field' }, [
@@ -1059,6 +1063,10 @@ async function openCardSettings() {
 
       const preview = el('div', { class: 'hint' });
       const refresh = () => {
+        // 프리셋으로 바뀐 값도 화면에 그대로 보이게 맞춰 둡니다.
+        closeSel.value = String(Number(draft.closingDay) || 0);
+        monthSel.value = draft.paymentNextMonth ? '1' : '0';
+        daySel.value = String(Number(draft.paymentDay) || 25);
         const c = money.cycleOf(money.currentCycleKey(draft), draft);
         preview.replaceChildren(
           el('span', { text: `이번 회차: ${money.formatCycleRange(c)}` }),
@@ -1067,6 +1075,15 @@ async function openCardSettings() {
         );
       };
       [closeSel, monthSel, daySel].forEach((n) => n.addEventListener('change', refresh));
+      presetRow.append(...money.CARD_PRESETS.map((p) => el('button', {
+        type: 'button', class: 'chip tap', text: p.label,
+        onclick: () => {
+          draft.closingDay = p.closingDay;
+          draft.paymentNextMonth = p.paymentNextMonth;
+          draft.paymentDay = p.paymentDay;
+          refresh();
+        },
+      })));
       refresh();
       body.append(preview);
     },
