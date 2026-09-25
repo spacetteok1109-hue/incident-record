@@ -6,6 +6,7 @@
 | --- | --- | --- |
 | **내 할 일 · 캘린더** | `.../incident-record/app/` | 투두 리스트 + 캘린더 + 디데이 (아래 문서) |
 | **현장 관리 · 팀원 일당** | `.../incident-record/work/` | 건설 현장의 팀원·현장·출역·일당·가불 관리 → [work/README.md](work/README.md) |
+| **실 자르기 · 색코드** | `.../incident-record/floss/` | 실 사진에서 빨간선으로 표시한 실만 잘라 정렬하고, 책자에서 가장 가까운 실 번호 찾기 → [floss/README.md](floss/README.md) |
 
 저장소 루트의 `index.html`(사립탐정 사건 기록부)은 그대로 두었습니다.
 
