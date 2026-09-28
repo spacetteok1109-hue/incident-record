@@ -14,13 +14,14 @@ import {
   relativeDateLabel, diffDays, periodProgress, formatRange, REPEAT_LABELS, bytesToText, debounce,
 } from './util.js';
 
-const APP_VERSION = '2.4.1';
+const APP_VERSION = '2.5.0';
 
 const state = {
   tab: 'calendar',
   cal: { y: new Date().getFullYear(), m: new Date().getMonth() },
   moneyMonth: money.thisMonthKey(),
   showDoneDday: false,
+  showCardPlans: false,
   selectedDate: todayKey(),
   folderId: null,
   settings: { theme: 'auto', hideCompleted: false, showBadge: true, showDdayOnCalendar: true },
@@ -885,11 +886,10 @@ async function renderMoney() {
   /* 신용카드 결제 예정 */
   content.push(await cardPanel());
 
-  /* 요약 — 오늘 / 이번 달 / 신용카드 */
+  /* 요약 — 오늘 / 이번 달. 수단별 금액은 아래 '이 달 내역' 에서 봅니다. */
   content.push(el('div', { class: 'stat-row' }, [
     statTile('오늘 쓴 돈', money.formatWon(sum.today), sum.todayCount ? `${sum.todayCount}건` : '기록 없음', 'today'),
     statTile('이 달 지출', money.formatWon(sum.month), `${sum.count}건`, 'total'),
-    statTile('신용카드', money.formatWon(sum.credit), sum.month ? `지출의 ${Math.round((sum.credit / sum.month) * 100)}%` : '—', 'card'),
   ]));
 
   /* 결제수단별 · 수입 */
@@ -902,8 +902,12 @@ async function renderMoney() {
     ['계좌이체', sum.month - sum.credit - sum.debit - sum.cash],
   ].forEach(([label, value]) => {
     if (!value) return;
+    const pct = sum.month ? Math.round((value / sum.month) * 100) : 0;
     breakdown.append(el('div', { class: 'settings-row' }, [
-      el('div', { class: 'grow' }, [el('div', { class: 'label', text: label })]),
+      el('div', { class: 'grow' }, [
+        el('div', { class: 'label', text: label }),
+        el('div', { class: 'desc', text: `지출의 ${pct}%` }),
+      ]),
       el('span', { class: 'value money-num', text: money.formatWon(value) }),
     ]));
   });
@@ -917,13 +921,24 @@ async function renderMoney() {
       el('span', { class: 'value money-num', text: money.formatWon(sum.income - sum.month, { sign: true }) }),
     ]));
   }
+  // 아직 다 내지 않은 할부가 있으면 잔액을 알려 줍니다.
+  const outstanding = await money.installmentOutstanding(await money.getCardSettings());
+  if (outstanding.total) {
+    breakdown.append(el('div', { class: 'settings-row' }, [
+      el('div', { class: 'grow' }, [
+        el('div', { class: 'label', text: '남은 할부금' }),
+        el('div', { class: 'desc', text: `${outstanding.count}건` }),
+      ]),
+      el('span', { class: 'value money-num', text: money.formatWon(outstanding.total) }),
+    ]));
+  }
   if (breakdown.children.length > 1) content.push(breakdown);
 
   /* 분류별 */
   const cats = await money.byCategory(monthKey);
   if (cats.length) {
     content.push(section('분류별'));
-    const list = el('div', { class: 'cat-list' });
+    const list = el('div', { class: 'cat-list panel' });
     cats.slice(0, 6).forEach((c) => {
       list.append(el('div', { class: 'cat-row' }, [
         el('span', { class: 'cat-emoji', text: c.info.emoji }),
@@ -963,59 +978,190 @@ async function renderMoney() {
   return [header, content];
 }
 
-/** 신용카드 합산 기간 · 결제일 · 선납 */
+/** 신용카드 청구 예정 — 할부·선납까지 한눈에 */
 async function cardPanel() {
   const st = await money.cardStatus();
   const c = st.cycle;
-  const paid = c.prepaid;
+  const hasPrepaid = st.prepaid > 0;
+  const settled = hasPrepaid && st.due === 0;
   const dLabel = c.daysLeft === 0 ? '오늘 결제'
     : c.daysLeft > 0 ? `D-${c.daysLeft}` : `${Math.abs(c.daysLeft)}일 지남`;
 
-  const card = el('section', { class: 'card-panel' + (paid ? ' paid' : '') });
+  const card = el('section', { class: 'card-panel' + (settled ? ' paid' : '') });
 
   card.append(el('div', { class: 'cp-top' }, [
-    el('span', { class: 'cp-title', text: '신용카드 결제 예정' }),
+    el('span', { class: 'cp-title', text: settled ? '이번 회차 결제 끝' : '신용카드 결제 예정' }),
     el('button', {
       type: 'button', class: 'cp-setting', 'aria-label': '결제 주기 설정',
       onclick: openCardSettings,
     }, [icon('settings', { size: 17 })]),
   ]));
 
-  card.append(el('div', { class: 'cp-amount money-num', text: money.formatWon(st.amount) }));
+  /* 실제로 더 낼 금액을 가장 크게 보여 줍니다. */
+  card.append(el('div', { class: 'cp-amount money-num', text: money.formatWon(st.due) }));
+  if (hasPrepaid) {
+    card.append(el('div', { class: 'cp-amount-sub' }, [
+      el('span', { text: `청구 ${money.formatWon(st.amount)}` }),
+      st.over ? el('span', { class: 'cp-dot', text: '·' }) : null,
+      st.over ? el('span', { class: 'prepaid', text: `${money.formatWon(st.over)} 더 냄` }) : null,
+    ]));
+    card.append(prepaidBar(st));
+  }
 
-  card.append(el('div', { class: 'cp-line' }, [
-    el('span', { class: 'cp-key', text: '합산 기간' }),
-    el('span', { class: 'cp-val', text: money.formatCycleRange(c) }),
+  card.append(cpLine('합산 기간', [el('span', { text: money.formatCycleRange(c) })]));
+  card.append(cpLine('결제일', [
+    el('span', { text: formatDate(c.payDate, { withYear: false }) }),
+    el('span', { class: 'cp-dday' + (c.daysLeft <= 3 && c.daysLeft >= 0 ? ' near' : ''), text: dLabel }),
   ]));
-  card.append(el('div', { class: 'cp-line' }, [
-    el('span', { class: 'cp-key', text: '결제일' }),
+
+  /* 할부가 걸려 있으면 일시불과 나눠서 보여 줍니다. */
+  if (st.plans.length) {
+    card.append(cpLine('일시불', [
+      el('span', { class: 'money-num', text: money.formatWon(st.lump) }),
+    ]));
+
+    const open = state.showCardPlans;
+    card.append(el('button', {
+      type: 'button',
+      class: 'cp-line cp-toggle',
+      'aria-expanded': String(open),
+      onclick: () => { state.showCardPlans = !state.showCardPlans; render(); },
+    }, [
+      el('span', { class: 'cp-key', text: `할부 ${st.plans.length}건` }),
+      el('span', { class: 'cp-val' }, [
+        el('span', { class: 'money-num', text: money.formatWon(st.installment) }),
+        el('span', { class: 'cp-caret' + (open ? ' open' : '') }, [icon('chevron', { size: 16 })]),
+      ]),
+    ]));
+
+    if (open) {
+      const list = el('div', { class: 'plan-list' });
+      st.plans.forEach((p) => {
+        const cat = money.categoryInfo(p.row.category, 'expense');
+        list.append(el('button', {
+          type: 'button', class: 'plan-row',
+          onclick: async () => { await openExpenseEditor(p.row); render(); },
+        }, [
+          el('span', { class: 'plan-emoji', text: cat.emoji }),
+          el('div', { class: 'plan-body' }, [
+            el('div', { class: 'plan-title', text: p.row.memo || cat.label }),
+            el('div', { class: 'plan-sub', text: p.left
+              ? `${p.index}/${p.months}회차 · ${money.formatWon(p.remaining)} 남음`
+              : `${p.index}/${p.months}회차 · 이번이 마지막` }),
+          ]),
+          el('span', { class: 'plan-due money-num', text: money.formatWon(p.due) }),
+        ]));
+      });
+      card.append(list);
+    }
+  }
+
+  /* 선납 — 누르면 금액을 적거나 고칩니다. FAB 과 겹치지 않게 줄로 둡니다. */
+  card.append(el('button', {
+    type: 'button',
+    class: 'cp-line cp-tap',
+    'aria-label': hasPrepaid ? '선납 금액 고치기' : '선납한 금액 적기',
+    onclick: () => openPrepaidSheet(st),
+  }, [
+    el('span', { class: 'cp-key', text: '선납' }),
     el('span', { class: 'cp-val' }, [
-      el('span', { text: formatDate(c.payDate, { withYear: false }) }),
-      el('span', { class: 'cp-dday' + (c.daysLeft <= 3 && c.daysLeft >= 0 ? ' near' : ''), text: dLabel }),
+      hasPrepaid
+        ? el('span', { class: 'money-num prepaid', text: `−${money.formatWon(st.prepaid)}` })
+        : el('span', { class: 'cp-empty', text: '미리 낸 금액 적기' }),
+      el('span', { class: 'cp-caret cp-next' }, [icon('chevron', { size: 16 })]),
     ]),
   ]));
+
   if (st.prev.amount) {
-    card.append(el('div', { class: 'cp-line' }, [
-      el('span', { class: 'cp-key', text: '지난 회차' }),
-      el('span', { class: 'cp-val' }, [
-        el('span', { class: 'money-num', text: money.formatWon(st.prev.amount) }),
-        el('span', { class: 'cp-dday', text: st.prev.prepaid ? '선납함' : '결제됨' }),
-      ]),
+    card.append(cpLine('지난 회차', [
+      el('span', { class: 'money-num', text: money.formatWon(st.prev.amount) }),
+      el('span', { class: 'cp-dday', text: st.prev.prepaid ? '선납함' : '결제됨' }),
     ]));
   }
 
-  card.append(el('button', {
-    type: 'button',
-    class: 'btn' + (paid ? ' primary' : ''),
-    style: { marginTop: '12px' },
-    text: paid ? '✓ 선납 완료 — 취소하려면 누르세요' : '이 회차 선납했어요',
-    onclick: async () => {
-      await money.togglePrepaid(c.key);
-      toast(paid ? '선납 표시를 지웠습니다.' : '선납으로 표시했습니다.');
-    },
-  }));
-
   return card;
+}
+
+function cpLine(key, vals) {
+  return el('div', { class: 'cp-line' }, [
+    el('span', { class: 'cp-key', text: key }),
+    el('span', { class: 'cp-val' }, vals),
+  ]);
+}
+
+/** 청구액 중 얼마나 미리 냈는지 보여 주는 막대 */
+function prepaidBar(st) {
+  const pct = st.amount ? Math.min(100, Math.round((st.prepaid / st.amount) * 100)) : 100;
+  return el('div', { class: 'prepaid-bar', role: 'img',
+    'aria-label': `청구액의 ${pct}%를 미리 냈습니다` }, [
+    el('span', { style: { width: `${pct}%` } }),
+  ]);
+}
+
+/** 이번 회차에 미리 낸 금액을 적는 시트 */
+async function openPrepaidSheet(st) {
+  let amount = st.prepaid;
+
+  const saved = await openSheet({
+    title: '선납 금액',
+    confirmLabel: '저장',
+    buildBody: ({ body }) => {
+      body.append(el('div', { class: 'hint' }, [
+        el('span', { text: `${money.formatCycleRange(st.cycle)} 회차 청구액은 ` }),
+        el('span', { class: 'strong', text: money.formatWon(st.amount) }),
+        el('span', { text: '입니다. 이 중 미리 낸 금액을 적어 주세요.' }),
+      ]));
+
+      const input = el('input', {
+        type: 'text', inputmode: 'numeric', class: 'amount-input',
+        placeholder: '0', 'data-autofocus': '',
+        value: amount ? new Intl.NumberFormat('ko-KR').format(amount) : '',
+        oninput: (e) => {
+          amount = money.parseAmount(e.target.value);
+          e.target.value = amount ? new Intl.NumberFormat('ko-KR').format(amount) : '';
+          refresh();
+        },
+      });
+      body.append(field('미리 낸 금액',
+        el('div', { class: 'amount-row' }, [input, el('span', { class: 'won', text: '원' })])));
+
+      const quick = el('div', { class: 'chip-row' });
+      const set = (n) => {
+        amount = Math.max(0, n);
+        input.value = amount ? new Intl.NumberFormat('ko-KR').format(amount) : '';
+        refresh();
+      };
+      quick.append(el('button', { type: 'button', class: 'chip tap', text: '전액',
+        onclick: () => set(st.amount) }));
+      quick.append(el('button', { type: 'button', class: 'chip tap', text: '절반',
+        onclick: () => set(Math.round(st.amount / 2)) }));
+      [100000, 500000].forEach((n) => quick.append(el('button', {
+        type: 'button', class: 'chip tap', text: `+${new Intl.NumberFormat('ko-KR').format(n)}`,
+        onclick: () => set((amount || 0) + n),
+      })));
+      quick.append(el('button', { type: 'button', class: 'chip tap', text: '지우기',
+        onclick: () => set(0) }));
+      body.append(quick);
+
+      const out = el('div', { class: 'hint' });
+      function refresh() {
+        const left = st.amount - amount;
+        out.replaceChildren(el('span', { class: 'strong', text: left > 0
+          ? `결제일에 ${money.formatWon(left)} 빠져나갑니다.`
+          : (left === 0 ? '결제일에 빠져나갈 금액이 없습니다.'
+            : `청구액보다 ${money.formatWon(-left)} 더 냈습니다.`) }));
+      }
+      refresh();
+      body.append(out);
+    },
+    onConfirm: async () => {
+      await money.setPrepaid(st.cycle.key, amount);
+      return true;
+    },
+  });
+
+  if (saved) toast(amount ? `선납 ${money.formatWon(amount)}으로 적어 두었습니다.` : '선납 기록을 지웠습니다.');
+  render();
 }
 
 async function openCardSettings() {
@@ -1103,6 +1249,7 @@ function statTile(label, value, sub, kind) {
 function expenseRow(r) {
   const cat = money.categoryInfo(r.category, r.type);
   const isIncome = r.type === 'income';
+  const months = money.installmentCount(r);
   return el('button', {
     type: 'button',
     class: 'expense-row',
@@ -1113,13 +1260,20 @@ function expenseRow(r) {
       el('div', { class: 'ex-title', text: r.memo || cat.label }),
       el('div', { class: 'ex-meta' }, [
         el('span', { class: 'chip', text: money.methodInfo(r.method).label }),
+        months > 1 ? el('span', { class: 'chip accent', text: `${months}개월 할부` }) : null,
         r.memo ? el('span', { class: 'chip', text: cat.label }) : null,
       ]),
     ]),
-    el('span', {
-      class: 'ex-amount money-num' + (isIncome ? ' income' : ''),
-      text: isIncome ? money.formatWon(r.amount, { sign: true }) : money.formatWon(r.amount),
-    }),
+    el('div', { class: 'ex-right' }, [
+      el('span', {
+        class: 'ex-amount money-num' + (isIncome ? ' income' : ''),
+        text: isIncome ? money.formatWon(r.amount, { sign: true }) : money.formatWon(r.amount),
+      }),
+      months > 1 ? el('span', {
+        class: 'ex-permonth',
+        text: `월 ${money.formatWon(money.installmentShare(r.amount, months, 1))}`,
+      }) : null,
+    ]),
   ]);
 }
 

@@ -166,6 +166,9 @@ html[data-theme='sky'] {
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 
+/* hidden 은 언제나 감춰져야 합니다. display 를 주는 규칙이 이기지 않도록. */
+[hidden] { display: none !important; }
+
 html, body {
   margin: 0;
   padding: 0;
@@ -687,12 +690,85 @@ main {
   display: grid; place-items: center; color: var(--text-faint);
 }
 .cp-amount {
-  font-size: 26px;
+  font-size: 28px;
   font-weight: 800;
-  letter-spacing: -0.6px;
-  margin: 4px 0 12px;
+  letter-spacing: -0.7px;
+  margin: 4px 0 2px;
 }
 .card-panel.paid .cp-amount { color: var(--ok); }
+
+/* 선납이 있을 때 청구액·선납액을 작게 덧붙입니다. */
+.cp-amount-sub {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+.cp-amount-sub .prepaid { color: var(--ok); font-weight: 700; }
+.cp-amount-sub .cp-dot { color: var(--text-faint); }
+
+.prepaid-bar {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--bg-elev-2);
+  overflow: hidden;
+  margin: 9px 0 2px;
+}
+.prepaid-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--ok);
+}
+
+.card-panel .cp-line:first-of-type { margin-top: 10px; }
+
+/* 누를 수 있는 줄 (할부 펼치기 · 선납 적기) */
+.cp-toggle, .cp-tap { width: 100%; text-align: left; }
+.cp-toggle:active, .cp-tap:active { background: var(--bg-elev-2); }
+.cp-amount-sub + .cp-line, .prepaid-bar + .cp-line { margin-top: 10px; }
+.cp-val .prepaid { color: var(--ok); }
+.cp-empty { color: var(--text-faint); font-size: 12.5px; }
+/* 다음 화면으로 넘어가는 화살표는 오른쪽을 가리킵니다. */
+.cp-caret.cp-next { transform: rotate(-90deg); }
+.cp-caret {
+  display: flex;
+  color: var(--text-faint);
+  transition: transform 0.15s ease;
+}
+.cp-caret.open { transform: rotate(180deg); }
+
+.plan-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 0 2px;
+}
+.plan-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-elev-2);
+}
+.plan-row:active { background: var(--line-soft); }
+.plan-emoji { font-size: 16px; flex: none; }
+.plan-body { flex: 1; min-width: 0; }
+.plan-title {
+  font-size: 13px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.plan-sub { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+.plan-due { flex: none; font-size: 13px; }
 .cp-line {
   display: flex;
   align-items: center;
@@ -885,7 +961,7 @@ main {
 
 .stat-row {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: 8px;
   margin-bottom: 4px;
 }
@@ -898,17 +974,18 @@ main {
   min-width: 0;
 }
 .stat-tile.today { border-color: var(--accent); }
-.stat-label { font-size: 11.5px; font-weight: 700; color: var(--text-dim); }
+.stat-label { font-size: 12px; font-weight: 700; color: var(--text-dim); }
 .stat-value {
-  font-size: 16px;
+  font-size: clamp(15px, 4.6vw, 19px);
   font-weight: 800;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.4px;
   margin: 5px 0 3px;
   word-break: keep-all;
+  overflow-wrap: anywhere;
 }
 .stat-tile.today .stat-value { color: var(--accent-ink); }
-.stat-sub { font-size: 10.5px; color: var(--text-faint); }
+.stat-sub { font-size: 11px; color: var(--text-faint); }
 
 .day-head {
   display: flex;
@@ -946,9 +1023,18 @@ main {
 }
 .ex-meta { display: flex; gap: 5px; margin-top: 4px; flex-wrap: wrap; }
 .ex-meta .chip { font-size: 10.5px; padding: 1px 7px; }
-.ex-amount { flex: none; font-size: 15px; }
+.ex-right { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 1px; }
+.ex-amount { font-size: 15px; }
+.ex-permonth { font-size: 10.5px; color: var(--text-faint); font-variant-numeric: tabular-nums; }
 
 .cat-list { display: flex; flex-direction: column; gap: 10px; }
+.cat-list.panel {
+  background: var(--bg-elev);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+  padding: 14px 15px;
+  gap: 12px;
+}
 .cat-row { display: flex; align-items: center; gap: 10px; }
 .cat-emoji { font-size: 18px; flex: none; }
 .cat-body { flex: 1; min-width: 0; }
@@ -986,6 +1072,9 @@ main {
 .tm-label { font-size: 13.5px; font-weight: 600; color: var(--text-dim); }
 .tm-value { flex: 1; font-size: 17px; text-align: right; }
 .tm-sub { font-size: 12px; color: var(--text-faint); flex: none; }
+
+/* 할부 고르기 */
+.installment-hint { margin-top: 7px; }
 
 /* 금액 입력 */
 .amount-row {
@@ -1304,6 +1393,9 @@ select {
 .settings-row .label { font-size: 14.5px; font-weight: 500; }
 .settings-row .desc { font-size: 12px; color: var(--text-dim); margin-top: 2px; line-height: 1.4; }
 .settings-row .value { font-size: 13px; color: var(--text-faint); }
+/* 금액은 읽을 일이 많으니 흐리지 않게 둡니다. */
+.settings-row .value.money-num { font-size: 14.5px; color: var(--text); }
+.settings-row .value.money-num.income { color: var(--ok); }
 .settings-row.danger .label { color: var(--danger); }
 
 .notice {

@@ -79,6 +79,7 @@ export function blankExpense(overrides = {}) {
     method: 'credit',
     category: 'food',
     memo: '',
+    installment: 1,       // 1 = 일시불, 2 이상 = N개월 할부
     createdAt: null,
     updatedAt: null,
     ...overrides,
@@ -107,6 +108,8 @@ export async function save(data) {
   if (row.type === 'income' && (row.method === 'credit' || row.method === 'debit')) {
     row.method = 'transfer';
   }
+  // 할부는 신용카드 지출에서만 의미가 있습니다.
+  row.installment = installmentCount(row);
   await db.put('expenses', row);
   notifyChanged();
   return row;
@@ -229,6 +232,53 @@ export async function monthsWithData() {
 
 
 /* ==========================================================
+   할부
+   ==========================================================
+   할부로 산 것은 가계부에는 '산 날 · 전체 금액' 으로 한 번만 적고,
+   카드 청구서에는 그 금액을 개월 수로 나눠 매달 한 번씩 올립니다.
+   나누어 떨어지지 않는 나머지는 첫 달에 붙입니다(카드사 관행).
+*/
+
+export const INSTALLMENT_MONTHS = [2, 3, 4, 5, 6, 9, 10, 12, 18, 24, 36];
+
+/** 그 내역의 할부 개월 수. 신용카드 지출이 아니면 언제나 1(일시불). */
+export function installmentCount(row) {
+  if (!row || row.type === 'income' || row.method !== 'credit') return 1;
+  const n = Math.round(Number(row.installment) || 1);
+  if (!Number.isFinite(n) || n < 2) return 1;
+  return Math.min(n, 36);
+}
+
+/** n개월 할부에서 i번째(0부터) 달에 빠져나갈 금액. */
+export function installmentShare(amount, n, i) {
+  const total = Math.round(Number(amount) || 0);
+  const months = Math.max(1, Math.round(Number(n) || 1));
+  if (i < 0 || i >= months) return 0;
+  if (months === 1) return total;
+  const base = Math.floor(total / months);
+  // 나머지는 첫 달에 몰아 줍니다.
+  return i === 0 ? total - base * (months - 1) : base;
+}
+
+/** 0번째부터 i번째 달까지 이미 나간 금액 */
+function paidThrough(amount, n, i) {
+  let t = 0;
+  for (let k = 0; k <= i; k += 1) t += installmentShare(amount, n, k);
+  return t;
+}
+
+/** '6개월 할부 · 매달 16,667원' 처럼 */
+export function installmentLabel(amount, n) {
+  const months = Math.max(1, Math.round(Number(n) || 1));
+  if (months < 2) return '일시불';
+  const first = installmentShare(amount, months, 0);
+  const rest = installmentShare(amount, months, 1);
+  if (!amount) return `${months}개월 할부`;
+  if (first === rest) return `${months}개월 할부 · 매달 ${formatWon(rest)}`;
+  return `${months}개월 할부 · 첫 달 ${formatWon(first)}, 이후 ${formatWon(rest)}`;
+}
+
+/* ==========================================================
    신용카드 결제 주기
    ==========================================================
    합산 마감일(closingDay)까지의 사용액이 한 회차가 되고,
@@ -242,7 +292,9 @@ export const DEFAULT_CARD = {
   closingDay: 0,        // 0 = 말일
   paymentDay: 25,
   paymentNextMonth: true,
-  prepaid: {},          // { '2026-08': true } — 회차 키는 마감월
+  // 회차별로 미리 낸 금액. 키는 마감월, 값은 원 단위 금액.
+  // 예전 자료에 남아 있는 true 는 '전액' 으로 읽습니다.
+  prepaid: {},          // { '2026-08': 150000 }
 };
 
 /**
@@ -299,6 +351,7 @@ export function cycleOf(cycleKey, settings = DEFAULT_CARD) {
     end,
     payDate,
     daysLeft: diffDays(todayKey(), payDate),
+    // 선납 기록이 있는지 여부. 얼마인지는 prepaidAmount() 로 봅니다.
     prepaid: !!settings.prepaid?.[cycleKey],
   };
 }
@@ -316,36 +369,134 @@ export function currentCycleKey(settings = DEFAULT_CARD) {
   return thisCycle.key;
 }
 
-/** 그 회차의 신용카드 사용액 */
-export async function cycleAmount(cycle) {
-  const rows = await getAll();
-  return rows
-    .filter((r) => r.type !== 'income' && r.method === 'credit')
-    .filter((r) => r.date >= cycle.start && r.date <= cycle.end)
-    .reduce((t, r) => t + (Number(r.amount) || 0), 0);
+/** 그 날짜에 쓴 돈이 청구되는 회차 키('YYYY-MM') */
+export function cycleKeyForDate(dateKey, settings = DEFAULT_CARD) {
+  const [y, m] = dateKey.split('-').map(Number);
+  const c = cycleOf(`${y}-${String(m).padStart(2, '0')}`, settings);
+  if (dateKey > c.end) return shiftMonthKey(c.key, 1);
+  if (dateKey < c.start) return shiftMonthKey(c.key, -1);
+  return c.key;
+}
+
+/** 'YYYY-MM' 두 개 사이의 개월 차 */
+function monthsBetweenKeys(from, to) {
+  const [fy, fm] = from.split('-').map(Number);
+  const [ty, tm] = to.split('-').map(Number);
+  return (ty - fy) * 12 + (tm - fm);
+}
+
+/**
+ * 그 회차에 실제로 빠져나갈 금액을 뜯어 봅니다.
+ *  lump        — 이번 회차에 쓴 일시불 합계
+ *  installment — 이번 달에 걸린 할부금 합계
+ *  plans       — 이번 달에 걸린 할부 건별 내역
+ */
+export async function cycleBreakdown(cycle, settings = DEFAULT_CARD) {
+  const rows = (await getAll()).filter((r) => r.type !== 'income' && r.method === 'credit');
+  let lump = 0;
+  const plans = [];
+
+  for (const r of rows) {
+    const months = installmentCount(r);
+    if (months < 2) {
+      if (r.date >= cycle.start && r.date <= cycle.end) lump += Math.round(Number(r.amount) || 0);
+      continue;
+    }
+    const i = monthsBetweenKeys(cycleKeyForDate(r.date, settings), cycle.key);
+    if (i < 0 || i >= months) continue;
+    const due = installmentShare(r.amount, months, i);
+    plans.push({
+      row: r,
+      months,
+      index: i + 1,                                        // 사람이 세는 회차(1부터)
+      due,
+      left: months - (i + 1),                              // 이번 것 빼고 남은 횟수
+      remaining: Math.round(Number(r.amount) || 0) - paidThrough(r.amount, months, i),
+    });
+  }
+
+  plans.sort((a, b) => b.due - a.due);
+  const installment = plans.reduce((t, p) => t + p.due, 0);
+  return { lump, installment, plans, total: lump + installment };
+}
+
+/** 그 회차의 청구액 (일시불 + 이번 달 할부금) */
+export async function cycleAmount(cycle, settings = DEFAULT_CARD) {
+  return (await cycleBreakdown(cycle, settings)).total;
+}
+
+/** 아직 다 내지 않은 할부 잔액 (이번 회차분 포함) */
+export async function installmentOutstanding(settings = DEFAULT_CARD) {
+  const rows = (await getAll()).filter((r) => r.type !== 'income' && r.method === 'credit');
+  const curKey = currentCycleKey(settings);
+  let total = 0;
+  let count = 0;
+  for (const r of rows) {
+    const months = installmentCount(r);
+    if (months < 2) continue;
+    const i = monthsBetweenKeys(cycleKeyForDate(r.date, settings), curKey);
+    if (i >= months) continue;                                  // 이미 다 냈습니다
+    const paid = i <= 0 ? 0 : paidThrough(r.amount, months, i - 1);
+    total += Math.round(Number(r.amount) || 0) - paid;
+    count += 1;
+  }
+  return { total, count };
+}
+
+/** 그 회차에 미리 낸 금액. 예전 자료의 true 는 '전액' 으로 읽습니다. */
+export function prepaidAmount(cycleKey, settings = DEFAULT_CARD, cycleTotal = 0) {
+  const v = settings?.prepaid?.[cycleKey];
+  if (v === true) return Math.round(Number(cycleTotal) || 0);
+  const n = Math.round(Number(v) || 0);
+  return n > 0 ? n : 0;
 }
 
 /** 화면에 뿌릴 현재 회차 요약 */
 export async function cardStatus() {
   const settings = await getCardSettings();
   const cycle = cycleOf(currentCycleKey(settings), settings);
-  const amount = await cycleAmount(cycle);
-  const prevKey = shiftMonthKey(cycle.key, -1);
-  const prevCycle = cycleOf(prevKey, settings);
+  const bd = await cycleBreakdown(cycle, settings);
+  const prepaid = prepaidAmount(cycle.key, settings, bd.total);
+
+  const prevCycle = cycleOf(shiftMonthKey(cycle.key, -1), settings);
+  const prevBd = await cycleBreakdown(prevCycle, settings);
+
   return {
     settings,
     cycle,
-    amount,
-    prev: { ...prevCycle, amount: await cycleAmount(prevCycle) },
+    amount: bd.total,
+    lump: bd.lump,
+    installment: bd.installment,
+    plans: bd.plans,
+    prepaid,
+    due: Math.max(0, bd.total - prepaid),
+    // 선납이 청구액보다 많으면 다음 달로 넘어갈 몫입니다.
+    over: Math.max(0, prepaid - bd.total),
+    prev: {
+      ...prevCycle,
+      amount: prevBd.total,
+      prepaid: prepaidAmount(prevCycle.key, settings, prevBd.total),
+    },
   };
 }
 
-export async function togglePrepaid(cycleKey) {
+/** 그 회차에 미리 낸 금액을 적어 둡니다. 0 이면 기록을 지웁니다. */
+export async function setPrepaid(cycleKey, amount) {
   const settings = await getCardSettings();
   const prepaid = { ...settings.prepaid };
-  if (prepaid[cycleKey]) delete prepaid[cycleKey];
-  else prepaid[cycleKey] = true;
+  const n = Math.round(Number(amount) || 0);
+  if (n > 0) prepaid[cycleKey] = n;
+  else delete prepaid[cycleKey];
   return setCardSettings({ prepaid });
+}
+
+/** 선납 기록을 켜고 끕니다. 금액을 주면 그만큼, 안 주면 '전액' 으로 둡니다. */
+export async function togglePrepaid(cycleKey, fullAmount) {
+  const settings = await getCardSettings();
+  if (settings.prepaid?.[cycleKey]) return setPrepaid(cycleKey, 0);
+  if (fullAmount != null) return setPrepaid(cycleKey, fullAmount);
+  // 금액을 모르면 '전액' 표시만 남깁니다. 청구액이 바뀌면 따라갑니다.
+  return setCardSettings({ prepaid: { ...settings.prepaid, [cycleKey]: true } });
 }
 
 /** '8월 1일 ~ 8월 31일' */
