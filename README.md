@@ -206,3 +206,16 @@ python3 -m http.server 8000
 
 `app/` 안의 파일을 루트로 옮기고 기존 `index.html`을 다른 이름
 (예: `detective.html`)으로 바꾸면 `.../incident-record/` 주소로 바로 열립니다.
+
+---
+
+## 검사 돌리기
+
+```bash
+./tests/run.sh
+```
+
+정적 서버를 알아서 띄우고, 계산 검사(`tests/unit-*.mjs`)와
+브라우저 검사(`tests/browser-*.mjs`)를 차례로 돌린 뒤 서버를 끕니다.
+브라우저 검사는 Playwright 와 Chromium 이 필요합니다.
+경로가 다르면 `PLAYWRIGHT_MODULE`, 주소가 다르면 `APP_BASE` 로 알려 주세요.

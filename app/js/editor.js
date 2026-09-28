@@ -645,6 +645,7 @@ function buildExpenseForm(api, draft, original) {
           b.setAttribute('aria-pressed', String(['expense', 'income'][i] === draft.type)));
         renderCategories();
         renderMethods();
+        refreshInstallment();
         amountInput.classList.toggle('income', draft.type === 'income');
       },
     }));
@@ -664,6 +665,7 @@ function buildExpenseForm(api, draft, original) {
       draft.amount = n;
       // 입력하는 동안에도 천 단위 쉼표가 보이게 합니다.
       e.target.value = n ? new Intl.NumberFormat('ko-KR').format(n) : '';
+      refreshInstallment();
     },
   });
   const amountWrap = el('div', { class: 'amount-row' }, [amountInput, el('span', { class: 'won', text: '원' })]);
@@ -677,12 +679,13 @@ function buildExpenseForm(api, draft, original) {
       onclick: () => {
         draft.amount = (draft.amount || 0) + n;
         amountInput.value = new Intl.NumberFormat('ko-KR').format(draft.amount);
+        refreshInstallment();
       },
     }));
   });
   quick.append(el('button', {
     type: 'button', class: 'chip tap', text: '지우기',
-    onclick: () => { draft.amount = 0; amountInput.value = ''; },
+    onclick: () => { draft.amount = 0; amountInput.value = ''; refreshInstallment(); },
   }));
   body.append(quick);
 
@@ -713,11 +716,48 @@ function buildExpenseForm(api, draft, original) {
           draft.method = m.value;
           [...methodWrap.children].forEach((b) =>
             b.setAttribute('aria-pressed', String(b.textContent === m.label)));
+          refreshInstallment();
         },
       }));
     });
   }
   renderMethods();
+
+  /* 할부 — 신용카드 지출일 때만 씁니다. */
+  const monthSel = el('select', {
+    class: 'installment-select',
+    onchange: (e) => {
+      draft.installment = Number(e.target.value) || 1;
+      refreshInstallment();
+    },
+  }, [
+    el('option', { value: '1', text: '일시불' }),
+    ...money.INSTALLMENT_MONTHS.map((n) => el('option', { value: String(n), text: `${n}개월` })),
+  ]);
+  const monthHint = el('div', { class: 'hint installment-hint' });
+  const installField = field('할부', monthSel, monthHint);
+  body.append(installField);
+
+  function refreshInstallment() {
+    const usable = draft.type !== 'income' && draft.method === 'credit';
+    installField.hidden = !usable;
+    if (!usable) {
+      // 카드가 아니면 할부가 남아 있지 않도록 되돌립니다.
+      draft.installment = 1;
+      return;
+    }
+    const n = Math.max(1, Math.round(Number(draft.installment) || 1));
+    monthSel.value = String(n);
+    if (n < 2) {
+      monthHint.textContent = '한 번에 빠져나갑니다.';
+      return;
+    }
+    // 조사를 붙이면 '원로' 처럼 어색해지므로 문장을 나눠 둡니다.
+    monthHint.replaceChildren(
+      el('span', { text: '카드 청구서에 나뉘어 올라갑니다. ' }),
+      el('span', { class: 'strong', text: money.installmentLabel(draft.amount, n) }),
+    );
+  }
 
   /* 분류 */
   const catWrap = el('div', { class: 'pick-grid' });
@@ -743,6 +783,7 @@ function buildExpenseForm(api, draft, original) {
     });
   }
   renderCategories();
+  refreshInstallment();
 
   /* 메모 */
   const memo = el('input', {
