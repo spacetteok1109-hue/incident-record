@@ -27,6 +27,7 @@
   --ok: #3fb27f;
   --radius: 14px;
   --radius-sm: 10px;
+  --lane-h: 17px;        /* 캘린더 기간 막대 한 줄 높이 */
   --tap: 44px;
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
@@ -277,7 +278,7 @@ main {
   left: 0; right: 0; bottom: 0;
   z-index: 30;
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   background: color-mix(in srgb, var(--bg-elev) 92%, transparent);
   backdrop-filter: saturate(160%) blur(14px);
   -webkit-backdrop-filter: saturate(160%) blur(14px);
@@ -544,7 +545,7 @@ main {
 .cal-cell {
   background: var(--bg-elev);
   /* 기간 막대가 들어갈 자리만큼 칸을 늘려 아랫줄과 겹치지 않게 합니다. */
-  min-height: calc(56px + var(--lanes, 0) * 9px);
+  min-height: calc(56px + var(--lanes, 0) * var(--lane-h));
   padding: 5px 3px 4px;
   display: flex;
   flex-direction: column;
@@ -607,28 +608,34 @@ main {
 .cal-bars {
   position: absolute;
   left: 0; right: 0;
-  top: 30px;
-  height: calc(var(--lanes, 0) * 9px);
+  top: 32px;
+  height: calc(var(--lanes, 0) * var(--lane-h));
   pointer-events: none;
   /* 칸보다 위에 그려야 어떤 칸을 골라도 선이 이어져 보입니다. */
   z-index: 2;
 }
 .cal-bar {
   position: absolute;
-  height: 7px;
-  border-radius: 4px;
-  pointer-events: auto;
+  height: 15px;
+  border-radius: 5px;
+  /* 막대는 보여 주기만 합니다. 탭은 아래 칸이 받아야 그 날을 고를 수 있습니다. */
+  pointer-events: none;
   overflow: hidden;
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 700;
-  color: var(--on-accent);
-  line-height: 7px;
-  padding: 0 3px;
+  line-height: 15px;
+  padding: 0 5px;
   white-space: nowrap;
-  opacity: 0.5;
+  /* 막대 바탕만 옅게(50%) 깔고 글씨는 또렷하게 둡니다. */
+  background: color-mix(in srgb, var(--bc, var(--accent)) 50%, transparent);
+  color: var(--text);
 }
-.cal-bar.done { opacity: 0.25; }
-.cal-bar.dday { border: 1px dashed rgba(255, 255, 255, 0.5); }
+.cal-bar.done { opacity: 0.4; }
+/* 디데이는 테두리를 점선으로 둬서 할 일과 구분합니다. */
+.cal-bar.dday {
+  background: color-mix(in srgb, var(--bc, var(--accent)) 22%, transparent);
+  border: 1px dashed color-mix(in srgb, var(--bc, var(--accent)) 75%, transparent);
+}
 .cal-bar span {
   display: block;
   overflow: hidden;
@@ -653,26 +660,6 @@ main {
   color: var(--text-dim);
 }
 .day-money-head .money-num { margin-left: auto; }
-
-/* 지난 할 일 알림 줄 */
-.overdue-banner {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  text-align: left;
-  padding: 12px 14px;
-  border-radius: var(--radius);
-  background: color-mix(in srgb, var(--danger) 14%, var(--bg-elev));
-  border: 1px solid color-mix(in srgb, var(--danger) 40%, transparent);
-  margin-bottom: 10px;
-}
-.ob-dot {
-  width: 8px; height: 8px; border-radius: 50%;
-  background: var(--danger); flex: none;
-}
-.ob-text { flex: 1; font-size: 13.5px; font-weight: 600; color: var(--danger); }
-.ob-go { font-size: 12.5px; color: var(--danger); font-weight: 700; flex: none; }
 
 /* 신용카드 결제 예정 */
 .card-panel {
@@ -789,6 +776,227 @@ main {
 }
 .cp-dday.near { background: var(--accent-soft); color: var(--accent-ink); }
 
+/* ---------------- 모아보기 (폴더 + 디데이) ---------------- */
+
+.group {
+  background: var(--bg-elev);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+  margin-bottom: 8px;
+  overflow: hidden;
+}
+.group.open { border-color: var(--line); }
+.group.faint .g-name, .group.faint .g-emoji { opacity: 0.55; }
+
+.group-head {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  padding: 14px 14px 14px 16px;
+  /* 폴더 색을 왼쪽에 얇게 둡니다. */
+  box-shadow: inset 3px 0 0 var(--fc, var(--accent));
+}
+.group-head:active { background: var(--bg-elev-2); }
+.g-emoji { font-size: 19px; flex: none; }
+.g-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 15px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.g-stat { flex: none; font-size: 12px; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+.g-caret { flex: none; display: flex; color: var(--text-faint); transition: transform 0.15s ease; }
+.group.open .g-caret { transform: rotate(180deg); }
+.g-edit {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 28px; height: 28px;
+  margin-right: -4px;
+  border-radius: 8px;
+  color: var(--text-faint);
+}
+.g-edit:active { background: var(--line-soft); }
+
+.group-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 2px 10px 12px;
+  border-top: 1px solid var(--line-soft);
+}
+.group-split { height: 1px; background: var(--line-soft); margin: 4px 4px 2px; }
+/* 묶음 안에서는 할 일 카드도 디데이 줄과 같은 결로 맞춥니다. */
+.group-body .item {
+  background: var(--bg-elev-2);
+  border-color: transparent;
+}
+.group-hint { font-size: 12.5px; color: var(--text-faint); padding: 10px 6px; }
+.group-more {
+  align-self: flex-start;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--accent-ink);
+  padding: 8px 6px 2px;
+}
+
+/* 디데이 한 줄 */
+.dd-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--bg-elev-2);
+  border-radius: var(--radius-sm);
+  padding: 9px 10px;
+}
+.dd-badge {
+  flex: none;
+  min-width: 52px;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.3px;
+  color: var(--accent-ink);
+}
+.dd-row.today .dd-badge { color: var(--on-accent); background: var(--accent); border-radius: 999px; padding: 2px 0; }
+.dd-row.past .dd-badge { color: var(--danger); }
+.dd-row.done { opacity: 0.5; }
+.dd-row.done .dd-badge { color: var(--text-faint); }
+.dd-row.done .dd-title { text-decoration: line-through; }
+
+.dd-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: left;
+  padding: 0;
+}
+.dd-title {
+  font-size: 14px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dd-sub {
+  font-size: 11.5px;
+  color: var(--text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dd-main .progress {
+  margin-top: 5px;
+  /* 줄 배경과 같은 색이면 막대가 안 보이므로 한 단계 진하게 둡니다. */
+  background: var(--line);
+}
+
+.dd-check {
+  flex: none;
+  width: 26px; height: 26px;
+  border-radius: 50%;
+  border: 2px solid var(--line);
+  display: grid;
+  place-items: center;
+  color: transparent;
+  background: var(--bg-elev);
+}
+.dd-check[aria-checked='true'] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+}
+
+.done-wrap { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; }
+
+/* ---------------- 캘린더 위 요약 줄 ---------------- */
+
+.sum-row { display: flex; gap: 8px; margin-bottom: 10px; }
+.sum-chip {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 12px;
+  background: var(--bg-elev);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-sm);
+}
+.sum-chip:active { background: var(--bg-elev-2); }
+.sum-chip.warn { border-color: color-mix(in srgb, var(--danger) 45%, transparent); }
+.sc-dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--danger); }
+.sc-label { font-size: 12.5px; color: var(--text-dim); font-weight: 600; }
+.sc-value {
+  flex: 1;
+  text-align: right;
+  font-size: 13.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sum-chip.warn .sc-value { color: var(--danger); }
+
+/* 한 줄로 접힌 안내 */
+.notice.slim {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0;
+  padding: 0 8px 0 12px;
+}
+/* 안내 안의 기본 버튼 꾸밈(밑줄 링크)을 여기서는 끕니다. */
+.notice.slim .n-head,
+.notice.slim .n-close {
+  color: inherit;
+  font-weight: 500;
+  text-decoration: none;
+}
+.notice.slim .n-head {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-align: left;
+  padding: 11px 0;
+}
+.notice.slim .ico { flex: none; font-size: 15px; }
+.notice.slim .n-text {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.notice.slim .n-more { flex: none; font-size: 11.5px; font-weight: 700; color: var(--accent-ink); }
+.notice.slim .n-close {
+  flex: none;
+  width: 30px; height: 30px;
+  display: grid; place-items: center;
+  color: var(--text-faint);
+  border-radius: 8px;
+}
+.notice.slim .n-detail {
+  flex-basis: 100%;
+  font-size: 12.5px;
+  color: var(--text-dim);
+  line-height: 1.5;
+  padding: 0 0 11px 23px;
+}
+
 /* ---------------- 폼 / 시트 ---------------- */
 .day-panel h2 {
   font-size: 15px;
@@ -798,99 +1006,6 @@ main {
   gap: 8px;
 }
 .day-panel h2 .dday-tag { font-size: 12px; color: var(--text-dim); font-weight: 600; }
-
-/* ---------------- 폴더 ---------------- */
-
-.folder-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-  gap: 10px;
-}
-
-.folder-card {
-  background: var(--bg-elev);
-  border: 1px solid var(--line-soft);
-  border-radius: var(--radius);
-  padding: 14px;
-  text-align: left;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  position: relative;
-  overflow: hidden;
-}
-.folder-card::before {
-  content: '';
-  position: absolute;
-  left: 0; top: 0; bottom: 0;
-  width: 4px;
-  background: var(--fc, var(--accent));
-}
-.folder-card .emoji { font-size: 26px; }
-.folder-card .name { font-weight: 700; font-size: 15px; word-break: break-word; }
-.folder-card .stat { font-size: 12px; color: var(--text-dim); }
-.folder-card .edit {
-  position: absolute; top: 6px; right: 6px;
-  width: 34px; height: 34px; border-radius: 9px;
-  color: var(--text-faint);
-  display: grid; place-items: center;
-}
-
-/* ---------------- 디데이 ---------------- */
-
-.dday-card {
-  background: var(--bg-elev);
-  border: 1px solid var(--line-soft);
-  border-radius: var(--radius);
-  padding: 16px;
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  position: relative;
-  overflow: hidden;
-}
-.dday-card .big {
-  font-size: 26px;
-  font-weight: 800;
-  letter-spacing: -0.5px;
-  font-variant-numeric: tabular-nums;
-  min-width: 92px;
-  text-align: center;
-  color: var(--accent-ink);
-}
-.dday-card.past .big { color: var(--text-faint); }
-.dday-card.today .big { color: var(--warn); }
-.dday-card .info { flex: 1; min-width: 0; }
-.dday-card .info .t { font-weight: 700; font-size: 15.5px; word-break: break-word; }
-.dday-card .info .d { font-size: 12.5px; color: var(--text-dim); margin-top: 2px; }
-.dday-card img.cover {
-  width: 100%; height: 120px; object-fit: cover;
-}
-.dday-card.with-photo { flex-direction: column; align-items: stretch; padding: 0; gap: 0; }
-.dday-card.with-photo .row { display: flex; align-items: center; gap: 14px; padding: 14px 16px; }
-
-/* 완료 체크 (카드 오른쪽 위) */
-.dday-check {
-  position: absolute;
-  top: 10px; right: 10px;
-  width: 30px; height: 30px;
-  border-radius: 50%;
-  border: 2px solid var(--line);
-  display: grid; place-items: center;
-  color: transparent;
-  background: var(--bg-elev);
-  transition: background 0.12s, border-color 0.12s;
-  z-index: 1;
-}
-.dday-check[aria-checked='true'] {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--on-accent);
-}
-/* 체크 버튼과 글자가 겹치지 않도록 자리를 비웁니다 */
-.dday-card .info { padding-right: 30px; }
-.dday-card.done { opacity: 0.55; }
-.dday-card.done .info .t { text-decoration: line-through; }
 
 /* 완료함 펼치기 */
 .done-toggle {
@@ -911,16 +1026,6 @@ main {
 .done-toggle.open { border-style: solid; margin-bottom: 8px; }
 .dt-arrow { font-size: 12px; color: var(--text-faint); font-weight: 600; }
 
-.dday-card .info .progress { margin-top: 8px; }
-.dday-card .period-line {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  margin-top: 5px;
-}
-.dday-card .period-line .pct { font-weight: 700; color: var(--accent-ink); }
-
 .check-count {
   font-size: 12px;
   font-weight: 700;
@@ -929,8 +1034,6 @@ main {
   padding-top: 9px;
   border-top: 1px solid var(--line-soft);
 }
-.dday-card .mini-checks { margin-top: 6px; }
-.dday-card.past .period-line .pct { color: var(--text-faint); }
 
 /* 편집 화면의 계산 결과 안내 */
 .hint {
@@ -1054,24 +1157,6 @@ main {
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
-
-/* 오늘 화면의 '오늘 쓴 돈' 줄 */
-.today-money {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  text-align: left;
-  padding: 13px 16px;
-  background: var(--bg-elev);
-  border: 1px solid var(--line-soft);
-  border-radius: var(--radius);
-  margin-bottom: 4px;
-}
-.today-money:active { background: var(--bg-elev-2); }
-.tm-label { font-size: 13.5px; font-weight: 600; color: var(--text-dim); }
-.tm-value { flex: 1; font-size: 17px; text-align: right; }
-.tm-sub { font-size: 12px; color: var(--text-faint); flex: none; }
 
 /* 할부 고르기 */
 .installment-hint { margin-top: 7px; }

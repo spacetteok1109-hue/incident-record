@@ -3,6 +3,19 @@
 export function $(sel, root = document) { return root.querySelector(sel); }
 export function $$(sel, root = document) { return [...root.querySelectorAll(sel)]; }
 
+/**
+ * style 객체를 넣습니다.
+ * '--이름' 같은 사용자 정의 속성은 Object.assign 으로는 들어가지 않아
+ * setProperty 로 따로 넣어 줘야 합니다.
+ */
+function setStyle(node, styles) {
+  for (const [prop, val] of Object.entries(styles)) {
+    if (val === null || val === undefined) continue;
+    if (prop.startsWith('--')) node.style.setProperty(prop, String(val));
+    else node.style[prop] = val;
+  }
+}
+
 export function el(tag, attrs = {}, children = []) {
   const node = document.createElement(tag);
   for (const [k, v] of Object.entries(attrs)) {
@@ -11,7 +24,7 @@ export function el(tag, attrs = {}, children = []) {
     else if (k === 'html') node.innerHTML = v;
     else if (k === 'text') node.textContent = v;
     else if (k === 'dataset') Object.assign(node.dataset, v);
-    else if (k === 'style' && typeof v === 'object') Object.assign(node.style, v);
+    else if (k === 'style' && typeof v === 'object') setStyle(node, v);
     else if (k.startsWith('on') && typeof v === 'function') node.addEventListener(k.slice(2), v);
     else node.setAttribute(k, v === true ? '' : v);
   }
