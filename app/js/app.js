@@ -14,7 +14,7 @@ import {
   relativeDateLabel, diffDays, periodProgress, formatRange, REPEAT_LABELS, bytesToText, debounce,
 } from './util.js';
 
-const APP_VERSION = '2.5.0';
+const APP_VERSION = '2.6.0';
 
 const state = {
   tab: 'calendar',
@@ -22,6 +22,8 @@ const state = {
   moneyMonth: money.thisMonthKey(),
   showDoneDday: false,
   showCardPlans: false,
+  // 모아보기에서 펼쳐 둔 묶음. 처음에는 모두 접어 두고 눌러서 폅니다.
+  openGroups: new Set(),
   selectedDate: todayKey(),
   folderId: null,
   settings: { theme: 'auto', hideCompleted: false, showBadge: true, showDdayOnCalendar: true },
@@ -95,8 +97,7 @@ function buildShell() {
 
 const TABS = [
   { id: 'calendar', label: '캘린더', ico: 'calendar' },
-  { id: 'folders', label: '폴더', ico: 'folder' },
-  { id: 'dday', label: '디데이', ico: 'dday' },
+  { id: 'list', label: '모아보기', ico: 'folder' },
   { id: 'money', label: '가계부', ico: 'wallet' },
   { id: 'settings', label: '설정', ico: 'settings' },
 ];
@@ -142,8 +143,7 @@ async function render() {
   let header;
   switch (state.tab) {
     case 'calendar': [header, content] = await renderCalendar(); break;
-    case 'folders': [header, content] = await renderFolders(); break;
-    case 'dday': [header, content] = await renderDday(); break;
+    case 'list': [header, content] = await renderList(); break;
     case 'money': [header, content] = await renderMoney(); break;
     case 'settings': [header, content] = await renderSettings(); break;
     default: [header, content] = await renderCalendar();
@@ -192,7 +192,7 @@ function iconBtn(name, label, onclick) {
 
 /* ---------------- 오늘 ---------------- */
 
-/** 캘린더 위쪽에 붙는 요약 — 지난 할 일, 오늘 쓴 돈, 다가오는 디데이 */
+/** 캘린더 위에 붙는 한 줄 요약 — 칸을 많이 먹지 않게 작게 둡니다. */
 async function calendarSummary() {
   const out = [];
 
@@ -200,35 +200,40 @@ async function calendarSummary() {
   if (banner) out.push(banner);
 
   const { overdue } = await store.todayBuckets();
+  const spend = await money.summary();
+  const chips = [];
+
   if (overdue.length) {
-    out.push(el('button', {
+    chips.push(el('button', {
       type: 'button',
-      class: 'overdue-banner',
+      class: 'sum-chip warn',
       onclick: () => {
         state.selectedDate = overdue[0].dueDate;
-        state.cal = { y: Number(overdue[0].dueDate.slice(0, 4)), m: Number(overdue[0].dueDate.slice(5, 7)) - 1 };
+        state.cal = {
+          y: Number(overdue[0].dueDate.slice(0, 4)),
+          m: Number(overdue[0].dueDate.slice(5, 7)) - 1,
+        };
         render();
       },
     }, [
-      el('span', { class: 'ob-dot' }),
-      el('span', { class: 'ob-text', text: `아직 끝내지 않은 지난 할 일 ${overdue.length}개` }),
-      el('span', { class: 'ob-go', text: '보기 ›' }),
+      el('span', { class: 'sc-dot' }),
+      el('span', { class: 'sc-label', text: '지난 할 일' }),
+      el('span', { class: 'sc-value', text: `${overdue.length}개` }),
     ]));
   }
 
-  const spend = await money.summary();
   if (spend.today || spend.todayCount) {
-    out.push(el('button', {
+    chips.push(el('button', {
       type: 'button',
-      class: 'today-money',
+      class: 'sum-chip',
       onclick: () => go('money'),
     }, [
-      el('span', { class: 'tm-label', text: '오늘 쓴 돈' }),
-      el('span', { class: 'tm-value money-num', text: money.formatWon(spend.today) }),
-      el('span', { class: 'tm-sub', text: `${spend.todayCount}건 ›` }),
+      el('span', { class: 'sc-label', text: '오늘 쓴 돈' }),
+      el('span', { class: 'sc-value money-num', text: money.formatWon(spend.today) }),
     ]));
   }
 
+  if (chips.length) out.push(el('div', { class: 'sum-row' }, chips));
   return out;
 }
 
@@ -253,7 +258,7 @@ async function itemList(items) {
   return list;
 }
 
-async function itemCard(item, folder) {
+async function itemCard(item, folder, { showFolder = true } = {}) {
   const overdue = !item.done && item.dueDate && item.dueDate < todayKey();
   const node = el('article', {
     class: 'item' + (item.done ? ' done' : '') + (overdue ? ' overdue' : ''),
@@ -298,7 +303,8 @@ async function itemCard(item, folder) {
   if (item.repeat && item.repeat !== 'none') {
     meta.append(el('span', { class: 'chip', text: '🔁 ' + REPEAT_LABELS[item.repeat] }));
   }
-  if (folder) {
+  // 폴더 안에서 보고 있을 때는 같은 이름을 또 붙이지 않습니다.
+  if (folder && showFolder) {
     meta.append(el('span', { class: 'chip folder', text: `${folder.emoji} ${folder.name}` }));
   }
   if (item.memo) meta.append(el('span', { class: 'chip', text: '📝' }));
@@ -464,11 +470,11 @@ function calendarWeek(week, summary, spans, folderColor) {
           style: {
             left: `calc(${(seg.from / 7) * 100}% + 2px)`,
             width: `calc(${((seg.to - seg.from + 1) / 7) * 100}% - 4px)`,
-            top: `${li * 9}px`,
-            background: color || 'var(--accent)',
+            top: `${li * LANE_H}px`,
+            // 색은 CSS 로 넘겨, 배경만 반투명하게 하고 글씨는 또렷하게 둡니다.
+            '--bc': color || 'var(--accent)',
           },
           title: seg.item.title,
-          onclick: (e) => { e.stopPropagation(); editItem(seg.item.id); },
         }, [seg.startsHere ? el('span', { text: seg.item.title }) : null]));
       });
     });
@@ -476,6 +482,9 @@ function calendarWeek(week, summary, spans, folderColor) {
   }
   return row;
 }
+
+/** 기간 막대 한 줄의 높이(px). CSS 의 --lane-h 와 맞춰 둡니다. */
+const LANE_H = 17;
 
 /** 그 주를 지나가는 항목들을 겹치지 않게 줄(lane)에 배치합니다. */
 function layoutSpans(week, spans) {
@@ -567,221 +576,214 @@ function shiftMonth(delta) {
 
 /* ---------------- 폴더 ---------------- */
 
-async function renderFolders() {
+async function renderList() {
+  /* 폴더 하나만 따로 들여다보는 화면 (묶음에서 '전체 보기' 로 옵니다) */
+  if (state.folderId !== null) return folderDetail();
+
   const folders = await store.getFolders();
   const items = await store.getItems();
-
-  if (state.folderId !== null) {
-    const folder = await store.getFolder(state.folderId);
-    if (!folder && state.folderId !== 'none') {
-      state.folderId = null;
-      return renderFolders();
-    }
-    const list = state.folderId === 'none'
-      ? store.sortItems(items.filter((i) => !i.folderId))
-      : await store.itemsForFolder(state.folderId);
-    const name = folder ? `${folder.emoji} ${folder.name}` : '📂 폴더 없음';
-    const header = [
-      iconBtn('back', '뒤로', () => { state.folderId = null; render(); }),
-      title(name, `${list.filter((i) => !i.done).length}개 남음 · 전체 ${list.length}개`),
-      folder ? iconBtn('edit', '폴더 수정', async () => {
-        await openFolderEditor(folder);
-        render();
-      }) : null,
-    ].filter(Boolean);
-    const content = [
-      await itemList(list),
-    ];
-    return [header, content];
-  }
+  const dday = await store.ddayItems();
+  const doneDday = await store.doneDdayItems();
+  const openTasks = items.filter((it) => it.type !== 'dday' && !it.done).length;
 
   const header = [
-    title('폴더', `${folders.length}개`),
-    iconBtn('plus', '폴더 추가', async () => { await openFolderEditor(); render(); }),
+    title('모아보기', `디데이 ${dday.length}개 · 할 일 ${openTasks}개`),
+    iconBtn('plus', '새 폴더', async () => { await openFolderEditor(); render(); }),
   ];
 
-  const grid = el('div', { class: 'folder-grid' });
-  const counts = new Map();
-  items.forEach((it) => {
+  const content = [];
+
+  /* 1) 날짜 순으로 본 디데이 전체 */
+  content.push(await groupCard({
+    id: 'dday',
+    emoji: '🎯',
+    name: '다가오는 디데이',
+    color: 'var(--accent)',
+    stat: dday.length ? `${dday.length}개` : '없음',
+    count: dday.length + doneDday.length,
+    build: async (body) => {
+      for (const d of dday) body.append(await ddayRow(d));
+      if (!dday.length) body.append(hintLine('등록한 디데이가 없습니다. ＋ 로 추가해 보세요.'));
+      if (doneDday.length) body.append(await doneDdaySection(doneDday));
+    },
+  }));
+
+  /* 2) 폴더별 */
+  const byFolder = new Map();
+  for (const it of items) {
     const key = it.folderId || 'none';
-    const cur = counts.get(key) || { total: 0, open: 0 };
-    cur.total++;
-    if (!it.done) cur.open++;
-    counts.set(key, cur);
-  });
-
-  folders.forEach((f) => {
-    const c = counts.get(f.id) || { total: 0, open: 0 };
-    grid.append(el('button', {
-      type: 'button',
-      class: 'folder-card',
-      style: { '--fc': f.color },
-      onclick: () => { state.folderId = f.id; render(); },
-    }, [
-      el('span', { class: 'emoji', text: f.emoji }),
-      el('span', { class: 'name', text: f.name }),
-      el('span', { class: 'stat', text: `할 일 ${c.open}개 · 전체 ${c.total}개` }),
-      el('span', {
-        class: 'edit', role: 'button', 'aria-label': '폴더 수정',
-        onclick: async (e) => { e.stopPropagation(); await openFolderEditor(f); render(); },
-      }, [icon('edit', { size: 17 })]),
-    ]));
-  });
-
-  const none = counts.get('none');
-  if (none) {
-    grid.append(el('button', {
-      type: 'button',
-      class: 'folder-card',
-      style: { '--fc': 'var(--text-faint)' },
-      onclick: () => { state.folderId = 'none'; render(); },
-    }, [
-      el('span', { class: 'emoji', text: '📂' }),
-      el('span', { class: 'name', text: '폴더 없음' }),
-      el('span', { class: 'stat', text: `할 일 ${none.open}개 · 전체 ${none.total}개` }),
-    ]));
+    if (!byFolder.has(key)) byFolder.set(key, []);
+    byFolder.get(key).push(it);
   }
 
-  const content = [grid];
+  for (const f of folders) {
+    content.push(await folderGroup(f.id, f.emoji, f.name, f.color, byFolder.get(f.id) || [], f));
+  }
+  if (byFolder.has('none')) {
+    content.push(await folderGroup('none', '📂', '폴더 없음', 'var(--text-faint)', byFolder.get('none'), null));
+  }
+
   if (!folders.length) {
     content.push(el('div', { class: 'empty' }, [
       el('span', { class: 'big', text: '📁' }),
-      el('p', { text: '폴더를 만들어 할 일을 나눠 보세요.' }),
+      el('p', { text: '폴더를 만들어 할 일과 디데이를 나눠 보세요.' }),
     ]));
   }
+
   content.push(el('button', {
     type: 'button',
     class: 'btn-ghost',
-    style: { marginTop: '14px' },
+    style: { marginTop: '12px' },
     text: '＋ 새 폴더',
     onclick: async () => { await openFolderEditor(); render(); },
   }));
+
   return [header, content];
 }
 
-/* ---------------- 디데이 ---------------- */
+/** 폴더 하나를 묶음으로 만듭니다. 디데이를 먼저, 그 다음 할 일. */
+async function folderGroup(id, emoji, name, color, list, folder) {
+  const dd = store.sortItems(list.filter((it) => it.type === 'dday' && !it.done));
+  const tasks = store.sortItems(list.filter((it) => it.type !== 'dday'));
+  const openTasks = tasks.filter((it) => !it.done).length;
+  const stat = [dd.length ? `디데이 ${dd.length}` : null, `할 일 ${openTasks}`]
+    .filter(Boolean).join(' · ');
 
-async function renderDday() {
-  const list = await store.ddayItems();
-  const done = await store.doneDdayItems();
-
-  const header = [
-    title('디데이', `${list.length}개`),
-    iconBtn('plus', '디데이 추가', () => createItem({ type: 'dday' })),
-  ];
-  const content = [];
-
-  if (!list.length) {
-    content.push(el('div', { class: 'empty' }, [
-      el('span', { class: 'big', text: '🎯' }),
-      el('p', { text: done.length ? '진행 중인 디데이가 없습니다.' : '기념일이나 시험일을 등록해 보세요.' }),
-      el('p', { text: done.length ? '아래에서 완료한 디데이를 볼 수 있습니다.' : '남은 날짜를 한눈에 볼 수 있습니다.' }),
-    ]));
-  } else {
-    const wrap = el('div', { class: 'card-list' });
-    for (const d of list) wrap.append(await ddayCard(d));
-    content.push(wrap);
-  }
-
-  // 완료한 디데이는 접어 두고, 눌러서 펼쳐 되돌리거나 지울 수 있습니다.
-  if (done.length) {
-    const open = state.showDoneDday === true;
-    content.push(el('button', {
-      type: 'button',
-      class: 'done-toggle' + (open ? ' open' : ''),
-      onclick: () => { state.showDoneDday = !open; render(); },
-    }, [
-      el('span', { class: 'dt-label', text: `완료함 ${done.length}개` }),
-      el('span', { class: 'dt-arrow', text: open ? '접기 ⌃' : '펼치기 ⌄' }),
-    ]));
-
-    if (open) {
-      const wrap = el('div', { class: 'card-list' });
-      for (const d of done) wrap.append(await ddayCard(d));
-      wrap.append(el('button', {
+  return groupCard({
+    id: `folder:${id}`,
+    emoji,
+    name,
+    color,
+    stat,
+    count: list.length,
+    onEdit: folder ? async () => { await openFolderEditor(folder); render(); } : null,
+    build: async (body) => {
+      for (const d of dd) body.append(await ddayRow(d));
+      const visible = state.settings.hideCompleted ? tasks.filter((t) => !t.done) : tasks;
+      if (dd.length && visible.length) body.append(el('div', { class: 'group-split' }));
+      for (const t of visible) body.append(await itemCard(t, folder, { showFolder: false }));
+      if (!dd.length && !visible.length) body.append(hintLine('아직 넣은 것이 없습니다.'));
+      body.append(el('button', {
         type: 'button',
-        class: 'btn danger',
-        text: `완료한 디데이 ${done.length}개 모두 지우기`,
-        onclick: async () => {
-          const ok = await confirmDialog({
-            title: '완료한 디데이 삭제',
-            message: `완료 표시한 디데이 ${done.length}개를 지울까요? 첨부한 사진도 함께 지워집니다.`,
-            confirmLabel: '삭제',
-            danger: true,
-          });
-          if (!ok) return;
-          for (const d of done) await store.deleteItem(d.id);
-          toast(`${done.length}개를 지웠습니다.`);
-        },
+        class: 'group-more',
+        text: '전체 보기 ›',
+        onclick: () => { state.folderId = id; render(); },
       }));
-      content.push(wrap);
-    }
-  }
-
-  return [header, content];
+    },
+  });
 }
 
-async function ddayCard(item) {
+/** 접었다 펼치는 묶음 한 덩어리 */
+async function groupCard({ id, emoji, name, color, stat, count = 0, onEdit = null, build }) {
+  const open = state.openGroups.has(id);
+  const wrap = el('section', { class: 'group' + (open ? ' open' : ''), style: { '--fc': color } });
+
+  const head = el('button', {
+    type: 'button',
+    class: 'group-head',
+    'aria-expanded': String(open),
+    onclick: () => {
+      if (open) state.openGroups.delete(id);
+      else state.openGroups.add(id);
+      render();
+    },
+  }, [
+    el('span', { class: 'g-emoji', text: emoji }),
+    el('span', { class: 'g-name', text: name }),
+    el('span', { class: 'g-stat', text: stat }),
+    el('span', { class: 'g-caret' }, [icon('chevron', { size: 17 })]),
+  ]);
+  wrap.append(head);
+
+  if (onEdit) {
+    head.append(el('span', {
+      class: 'g-edit', role: 'button', 'aria-label': `${name} 폴더 수정`,
+      onclick: (e) => { e.stopPropagation(); onEdit(); },
+    }, [icon('edit', { size: 16 })]));
+  }
+
+  if (open) {
+    const body = el('div', { class: 'group-body' });
+    await build(body);
+    wrap.append(body);
+  } else if (!count) {
+    wrap.classList.add('faint');
+  }
+  return wrap;
+}
+
+function hintLine(text) {
+  return el('div', { class: 'group-hint', text });
+}
+
+/** 완료한 디데이 — 접어 두고 되돌리거나 한 번에 지웁니다. */
+async function doneDdaySection(done) {
+  const open = state.showDoneDday === true;
+  const wrap = el('div', { class: 'done-wrap' });
+  wrap.append(el('button', {
+    type: 'button',
+    class: 'done-toggle' + (open ? ' open' : ''),
+    onclick: () => { state.showDoneDday = !open; render(); },
+  }, [
+    el('span', { class: 'dt-label', text: `완료함 ${done.length}개` }),
+    el('span', { class: 'dt-arrow', text: open ? '접기 ⌃' : '펼치기 ⌄' }),
+  ]));
+
+  if (open) {
+    for (const d of done) wrap.append(await ddayRow(d));
+    wrap.append(el('button', {
+      type: 'button',
+      class: 'btn danger',
+      style: { marginTop: '8px' },
+      text: `완료한 디데이 ${done.length}개 모두 지우기`,
+      onclick: async () => {
+        const ok = await confirmDialog({
+          title: '완료한 디데이 삭제',
+          message: `완료 표시한 디데이 ${done.length}개를 지울까요? 첨부한 사진도 함께 지워집니다.`,
+          confirmLabel: '삭제',
+          danger: true,
+        });
+        if (!ok) return;
+        for (const d of done) await store.deleteItem(d.id);
+        toast(`${done.length}개를 지웠습니다.`);
+      },
+    }));
+  }
+  return wrap;
+}
+
+/** 디데이 한 줄 — 많아도 훑어보기 쉽게 낮게 만들었습니다. */
+async function ddayRow(item) {
   const diff = diffDays(todayKey(), item.dueDate);
-  const cls = ['dday-card', diff === 0 ? 'today' : (diff < 0 ? 'past' : ''),
-    item.done ? 'done' : ''].filter(Boolean);
-  const folder = await store.getFolder(item.folderId);
+  const cls = ['dd-row', item.done ? 'done' : (diff === 0 ? 'today' : (diff < 0 ? 'past' : ''))]
+    .filter(Boolean).join(' ');
+  const row = el('article', { class: cls });
+
+  row.append(el('span', { class: 'dd-badge', text: ddayLabel(item.dueDate) }));
 
   const period = itemPeriod(item);
-  const dateText = period
-    ? formatRange(item.startDate, item.dueDate)
-    : formatDate(item.dueDate, { withYear: true });
+  const checks = item.checklist || [];
+  const doneChecks = checks.filter((c) => c.done).length;
+  const sub = [
+    period ? formatRange(item.startDate, item.dueDate) : formatDate(item.dueDate, { withYear: false }),
+    checks.length ? `☑ ${doneChecks}/${checks.length}` : null,
+  ].filter(Boolean).join(' · ');
 
-  const info = el('div', { class: 'info' }, [
-    el('div', { class: 't', text: item.title }),
-    el('div', {
-      class: 'd',
-      text: [dateText, folder ? `${folder.emoji} ${folder.name}` : null].filter(Boolean).join(' · '),
-    }),
-  ]);
-
-  if (period) {
-    info.append(
-      el('div', { class: 'progress' }, [el('span', { style: { width: `${period.percent}%` } })]),
-      el('div', { class: 'd period-line' }, [
-        el('span', { text: periodLabel(period) }),
-        el('span', { class: 'pct', text: `${period.percent}%` }),
-      ]),
-    );
-  }
-
-  // 디데이에도 체크리스트를 보여 주고 바로 체크할 수 있게 합니다.
-  info.append(...checklistNodes(item, { limit: 5, withBar: false }));
-
-  const parts = [
-    el('div', { class: 'big', text: ddayLabel(item.dueDate) }),
-    info,
-  ];
-
-  let cover = null;
-  if ((item.photoIds || []).length) {
-    const photos = await media.getPhotos(item.photoIds);
-    if (photos.length) {
-      cover = el('img', {
-        class: 'cover',
-        src: media.photoURL(photos[0]),
-        alt: '',
-        loading: 'lazy',
-        onclick: (e) => { e.stopPropagation(); openViewer(media.photoURL(photos[0], { full: true })); },
-      });
-    }
-  }
-
-  // 사진이 있으면 사진을 위에 깔고 그 아래에 내용을 한 줄로 놓습니다.
-  const card = cover
-    ? el('article', { class: cls.join(' ') + ' with-photo' }, [cover, el('div', { class: 'row' }, parts)])
-    : el('article', { class: cls.join(' ') }, parts);
-
-  // 완료 체크. 완료하면 목록에서 빠지고, 토스트로 되돌릴 수 있습니다.
-  const wasDone = !!item.done;
-  card.append(el('button', {
+  const main = el('button', {
     type: 'button',
-    class: 'dday-check',
+    class: 'dd-main',
+    onclick: () => openItemById(item.id),
+  }, [
+    el('span', { class: 'dd-title', text: item.title }),
+    el('span', { class: 'dd-sub', text: sub }),
+    period ? el('span', { class: 'progress' }, [el('span', { style: { width: `${period.percent}%` } })]) : null,
+  ]);
+  row.append(main);
+
+  const wasDone = !!item.done;
+  row.append(el('button', {
+    type: 'button',
+    class: 'dd-check',
     role: 'checkbox',
     'aria-checked': String(wasDone),
     'aria-label': wasDone ? '완료 취소' : '완료로 표시',
@@ -798,16 +800,34 @@ async function ddayCard(item) {
     },
   }, [icon('check', { size: 15, strokeWidth: 2.6 })]));
 
-  card.addEventListener('click', () => editItem(item.id));
-  return card;
+  return row;
 }
 
-/**
- * 카드 안에 넣을 체크리스트 조각을 만듭니다.
- * 할 일 카드와 디데이 카드가 같은 모양을 쓰도록 여기서 한 번만 만듭니다.
- * withBar 는 완료율 막대를 함께 그릴지 여부입니다.
- * (디데이 카드에는 기간 진행 막대가 이미 있어 헷갈리지 않도록 숫자로만 보여 줍니다.)
- */
+/** 폴더 하나만 크게 보는 화면 */
+async function folderDetail() {
+  const items = await store.getItems();
+  const folder = await store.getFolder(state.folderId);
+  if (!folder && state.folderId !== 'none') {
+    state.folderId = null;
+    return renderList();
+  }
+  const list = state.folderId === 'none'
+    ? store.sortItems(items.filter((i) => !i.folderId))
+    : await store.itemsForFolder(state.folderId);
+  const name = folder ? `${folder.emoji} ${folder.name}` : '📂 폴더 없음';
+
+  const header = [
+    iconBtn('back', '뒤로', () => { state.folderId = null; render(); }),
+    title(name, `${list.filter((i) => !i.done).length}개 남음 · 전체 ${list.length}개`),
+    folder ? iconBtn('edit', '폴더 수정', async () => {
+      await openFolderEditor(folder);
+      render();
+    }) : null,
+  ].filter(Boolean);
+
+  return [header, [await itemList(list)]];
+}
+
 function checklistNodes(item, { limit = 6, withBar = true } = {}) {
   const checks = item.checklist || [];
   if (!checks.length) return [];
@@ -1838,8 +1858,7 @@ function setupAutoLock() {
 async function createItem(defaults = {}) {
   const base = { ...defaults };
   if (state.tab === 'calendar' && !base.dueDate) base.dueDate = state.selectedDate;
-  if (state.tab === 'dday' && !base.type) base.type = 'dday';
-  if (state.tab === 'folders' && state.folderId && state.folderId !== 'none' && !base.folderId) {
+  if (state.tab === 'list' && state.folderId && state.folderId !== 'none' && !base.folderId) {
     base.folderId = state.folderId;
   }
   const saved = await openItemEditor(null, base);
@@ -1872,6 +1891,29 @@ function handleLaunchParams() {
 
 /* ---------------- 알림 안내 배너 ---------------- */
 
+/** 한 줄로 접힌 안내. 눌러야 설명이 보이고, 오른쪽 ✕ 로 지웁니다. */
+function slimNotice(emoji, headline, detail, warn = false) {
+  const box = el('div', { class: 'notice slim' + (warn ? ' warn' : '') });
+  const body = el('div', { class: 'n-detail', text: detail, hidden: true });
+  box.append(
+    el('button', {
+      type: 'button',
+      class: 'n-head',
+      onclick: () => { body.hidden = !body.hidden; },
+    }, [
+      el('span', { class: 'ico', text: emoji }),
+      el('span', { class: 'n-text', text: headline }),
+      el('span', { class: 'n-more', text: '자세히' }),
+    ]),
+    body,
+    el('button', {
+      type: 'button', class: 'n-close', 'aria-label': '안내 닫기',
+      onclick: async () => { await db.setMeta('notifBannerDismissed', true); render(); },
+    }, [icon('close', { size: 15 })]),
+  );
+  return box;
+}
+
 async function notificationBanner() {
   const perm = notify.permission();
   if (perm === 'granted' || perm === 'unsupported') return null;
@@ -1879,31 +1921,13 @@ async function notificationBanner() {
   if (dismissed) return null;
 
   if (notify.needsInstallForNotifications()) {
-    return el('div', { class: 'notice' }, [
-      el('span', { class: 'ico', text: '📲' }),
-      el('div', {}, [
-        el('div', { text: '알림을 받으려면 홈 화면에 추가해 주세요.' }),
-        el('div', { style: { color: 'var(--text-dim)', marginTop: '4px', fontSize: '12.5px' },
-          text: 'Safari 아래 공유 버튼 → "홈 화면에 추가" → 홈 화면 아이콘으로 열기' }),
-        el('button', {
-          type: 'button', style: { marginTop: '6px' }, text: '다시 보지 않기',
-          onclick: async () => { await db.setMeta('notifBannerDismissed', true); render(); },
-        }),
-      ]),
-    ]);
+    return slimNotice('📲', '알림을 받으려면 홈 화면에 추가해 주세요.',
+      'Safari 아래 공유 버튼 → "홈 화면에 추가" → 홈 화면 아이콘으로 열기');
   }
 
   if (perm === 'denied') {
-    return el('div', { class: 'notice warn' }, [
-      el('span', { class: 'ico', text: '🔕' }),
-      el('div', {}, [
-        el('div', { text: '알림이 차단되어 있습니다. 브라우저의 사이트 설정에서 알림을 허용해 주세요.' }),
-        el('button', {
-          type: 'button', style: { marginTop: '6px' }, text: '다시 보지 않기',
-          onclick: async () => { await db.setMeta('notifBannerDismissed', true); render(); },
-        }),
-      ]),
-    ]);
+    return slimNotice('🔕', '알림이 차단되어 있습니다.',
+      '브라우저의 사이트 설정에서 알림을 허용해 주세요.', true);
   }
 
   return el('div', { class: 'notice' }, [
