@@ -759,13 +759,27 @@ function buildExpenseForm(api, draft, original) {
     );
   }
 
-  /* 분류 */
+  /* 분류 — 오른쪽 '편집' 으로 목록 자체를 고칠 수 있습니다. */
   const catWrap = el('div', { class: 'pick-grid' });
-  body.append(field('분류', catWrap));
+  const catField = field('분류', catWrap);
+  catField.querySelector('label').append(el('button', {
+    type: 'button',
+    class: 'field-link',
+    text: '편집',
+    onclick: async () => {
+      const { openCategoryManager } = await import('./app.js');
+      await openCategoryManager(draft.type);
+      renderCategories();
+    },
+  }));
+  body.append(catField);
 
   function renderCategories() {
     catWrap.replaceChildren();
-    money.categoriesFor(draft.type).forEach((c) => {
+    const list = money.categoriesFor(draft.type);
+    // 고르고 있던 분류가 지워졌으면 첫 번째로 되돌립니다.
+    if (!list.some((c) => c.value === draft.category)) draft.category = list[0].value;
+    list.forEach((c) => {
       catWrap.append(el('button', {
         type: 'button',
         class: 'pick',
