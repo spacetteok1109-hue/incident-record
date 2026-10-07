@@ -14,12 +14,14 @@ import {
   relativeDateLabel, diffDays, periodProgress, formatRange, REPEAT_LABELS, bytesToText, debounce,
 } from './util.js';
 
-const APP_VERSION = '2.6.0';
+const APP_VERSION = '2.7.0';
 
 const state = {
   tab: 'calendar',
   cal: { y: new Date().getFullYear(), m: new Date().getMonth() },
   moneyMonth: money.thisMonthKey(),
+  // 가계부에서 골라 둔 결제수단. 'all' 이면 전부 합쳐 봅니다.
+  moneyMethod: 'all',
   showDoneDday: false,
   showCardPlans: false,
   // 모아보기에서 펼쳐 둔 묶음. 처음에는 모두 접어 두고 눌러서 폅니다.
@@ -881,8 +883,11 @@ function periodLabel(p) {
 
 async function renderMoney() {
   const monthKey = state.moneyMonth;
-  const sum = await money.summary(monthKey);
-  const rows = await money.forMonth(monthKey);
+  const method = state.moneyMethod;
+  const totals = await money.methodTotals(monthKey);
+  const sum = await money.summary(monthKey, { method });
+  const rows = await money.forMonth(monthKey, { method });
+  const picked = method === 'all' ? null : money.methodInfo(method);
 
   const header = [
     title('가계부', money.formatMonth(monthKey)),
@@ -906,44 +911,44 @@ async function renderMoney() {
   /* 신용카드 결제 예정 */
   content.push(await cardPanel());
 
-  /* 요약 — 오늘 / 이번 달. 수단별 금액은 아래 '이 달 내역' 에서 봅니다. */
+  /* 결제수단 고르기 — 수단별 금액을 띄워 두고, 누르면 그 수단만 봅니다. */
+  content.push(methodPicker(totals, method));
+
+  /* 요약 — 오늘 / 둘째 칸.
+     수단을 고른 동안에는 그 수단의 이 달 합계를 크게 보여 주고,
+     전체일 때는 위 '전체' 칩과 같은 숫자가 되므로 수입에서 쓴 돈을 뺀
+     '남은 금액' 을 대신 올립니다. */
+  const todayLabel = picked ? `오늘 ${picked.label}` : '오늘 쓴 돈';
+  const second = (!picked && sum.income)
+    ? statTile('남은 금액', money.formatWon(sum.income - sum.month, { sign: true }),
+      `수입 ${money.formatWon(sum.income)}`, 'total')
+    : statTile(picked ? `이 달 ${picked.label}` : '이 달 지출',
+      money.formatWon(sum.month), `${sum.count}건`, 'total');
   content.push(el('div', { class: 'stat-row' }, [
-    statTile('오늘 쓴 돈', money.formatWon(sum.today), sum.todayCount ? `${sum.todayCount}건` : '기록 없음', 'today'),
-    statTile('이 달 지출', money.formatWon(sum.month), `${sum.count}건`, 'total'),
+    statTile(todayLabel, money.formatWon(sum.today), sum.todayCount ? `${sum.todayCount}건` : '기록 없음', 'today'),
+    second,
   ]));
 
-  /* 결제수단별 · 수입 */
+  /* 수입 · 남은 금액 · 남은 할부금 (수단별 금액은 위 칩에서 봅니다) */
   const breakdown = el('div', { class: 'settings-group' });
-  breakdown.append(el('div', { class: 'head', text: '이 달 내역' }));
-  [
-    ['신용카드', sum.credit],
-    ['체크카드', sum.debit],
-    ['현금', sum.cash],
-    ['계좌이체', sum.month - sum.credit - sum.debit - sum.cash],
-  ].forEach(([label, value]) => {
-    if (!value) return;
-    const pct = sum.month ? Math.round((value / sum.month) * 100) : 0;
-    breakdown.append(el('div', { class: 'settings-row' }, [
-      el('div', { class: 'grow' }, [
-        el('div', { class: 'label', text: label }),
-        el('div', { class: 'desc', text: `지출의 ${pct}%` }),
-      ]),
-      el('span', { class: 'value money-num', text: money.formatWon(value) }),
-    ]));
-  });
+  breakdown.append(el('div', { class: 'head', text: '이 달 정리' }));
   if (sum.income) {
     breakdown.append(el('div', { class: 'settings-row' }, [
       el('div', { class: 'grow' }, [el('div', { class: 'label', text: '수입' })]),
       el('span', { class: 'value money-num income', text: money.formatWon(sum.income, { sign: true }) }),
     ]));
-    breakdown.append(el('div', { class: 'settings-row' }, [
-      el('div', { class: 'grow' }, [el('div', { class: 'label', text: '남은 금액' })]),
-      el('span', { class: 'value money-num', text: money.formatWon(sum.income - sum.month, { sign: true }) }),
-    ]));
+    // 수단을 고른 동안에는 위 타일에 '남은 금액' 이 없으므로 여기에 둡니다.
+    if (picked) {
+      breakdown.append(el('div', { class: 'settings-row' }, [
+        el('div', { class: 'grow' }, [el('div', { class: 'label', text: '남은 금액' })]),
+        el('span', { class: 'value money-num',
+          text: money.formatWon(sum.income - totals.all, { sign: true }) }),
+      ]));
+    }
   }
   // 아직 다 내지 않은 할부가 있으면 잔액을 알려 줍니다.
   const outstanding = await money.installmentOutstanding(await money.getCardSettings());
-  if (outstanding.total) {
+  if (outstanding.total && (method === 'all' || method === 'credit')) {
     breakdown.append(el('div', { class: 'settings-row' }, [
       el('div', { class: 'grow' }, [
         el('div', { class: 'label', text: '남은 할부금' }),
@@ -955,7 +960,7 @@ async function renderMoney() {
   if (breakdown.children.length > 1) content.push(breakdown);
 
   /* 분류별 */
-  const cats = await money.byCategory(monthKey);
+  const cats = await money.byCategory(monthKey, { method });
   if (cats.length) {
     content.push(section('분류별'));
     const list = el('div', { class: 'cat-list panel' });
@@ -979,11 +984,11 @@ async function renderMoney() {
   if (!rows.length) {
     content.push(el('div', { class: 'empty' }, [
       el('span', { class: 'big', text: '🧾' }),
-      el('p', { text: '이 달에 기록한 내역이 없습니다.' }),
-      el('p', { text: '아래 ＋ 버튼으로 오늘 쓴 돈을 적어 보세요.' }),
+      el('p', { text: picked ? `이 달에 ${picked.label}로 쓴 기록이 없습니다.` : '이 달에 기록한 내역이 없습니다.' }),
+      el('p', { text: picked ? '위에서 ‘전체’를 누르면 다 볼 수 있습니다.' : '아래 ＋ 버튼으로 오늘 쓴 돈을 적어 보세요.' }),
     ]));
   } else {
-    content.push(section('전체 내역', rows.length));
+    content.push(section(picked ? `${picked.label} 내역` : '전체 내역', rows.length));
     const wrap = el('div', { class: 'card-list' });
     money.groupByDate(rows).forEach((day) => {
       wrap.append(el('div', { class: 'day-head' }, [
@@ -996,6 +1001,36 @@ async function renderMoney() {
   }
 
   return [header, content];
+}
+
+/**
+ * 결제수단 고르는 줄.
+ * 칩마다 그 수단으로 이 달에 쓴 금액이 적혀 있어, 고르지 않아도 한눈에 비교됩니다.
+ * 기록이 없는 수단도 신용·체크·현금은 늘 보여 줘서 자리가 흔들리지 않게 합니다.
+ */
+function methodPicker(totals, picked) {
+  const ALWAYS = ['credit', 'debit', 'cash'];
+  const shown = money.METHODS.filter((m) => ALWAYS.includes(m.value) || totals[m.value]);
+
+  const row = el('div', { class: 'method-row', role: 'tablist', 'aria-label': '결제수단 고르기' });
+  const chip = (value, label, amount) => el('button', {
+    type: 'button',
+    class: 'method-chip' + (picked === value ? ' on' : ''),
+    role: 'tab',
+    'aria-selected': String(picked === value),
+    onclick: () => {
+      // 이미 고른 것을 다시 누르면 전체로 돌아옵니다.
+      state.moneyMethod = picked === value ? 'all' : value;
+      render();
+    },
+  }, [
+    el('span', { class: 'mc-label', text: label }),
+    el('span', { class: 'mc-amount money-num', text: money.formatWon(amount) }),
+  ]);
+
+  row.append(chip('all', '전체', totals.all));
+  shown.forEach((m) => row.append(chip(m.value, m.label, totals[m.value])));
+  return row;
 }
 
 /** 신용카드 청구 예정 — 할부·선납까지 한눈에 */
