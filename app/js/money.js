@@ -15,7 +15,16 @@ export const METHODS = [
   { value: 'transfer', label: '계좌이체', short: '이체' },
 ];
 
-export const EXPENSE_CATEGORIES = [
+/* ---------------- 분류 ----------------
+ * 처음에는 아래 기본 묶음으로 시작하고, 그 뒤로는 쓰는 사람이 고친 목록을
+ * meta('categories') 에 담아 둡니다. value 는 한 번 정해지면 바꾸지 않습니다
+ * (이미 적어 둔 내역이 그 값을 가리키고 있기 때문입니다).
+ *
+ * 화면 그리는 곳에서 매번 기다리지 않도록 메모리에 올려 두고 씁니다.
+ * 앱을 켤 때 loadCategories() 를 한 번 부르고, 고칠 때마다 갱신합니다.
+ */
+
+export const DEFAULT_EXPENSE_CATEGORIES = [
   { value: 'food', label: '식비', emoji: '🍚' },
   { value: 'cafe', label: '카페·간식', emoji: '☕' },
   { value: 'transport', label: '교통', emoji: '🚌' },
@@ -28,20 +37,99 @@ export const EXPENSE_CATEGORIES = [
   { value: 'etc', label: '기타', emoji: '📦' },
 ];
 
-export const INCOME_CATEGORIES = [
+export const DEFAULT_INCOME_CATEGORIES = [
   { value: 'salary', label: '급여', emoji: '💰' },
   { value: 'allowance', label: '용돈', emoji: '🧧' },
   { value: 'refund', label: '환급·환불', emoji: '↩️' },
   { value: 'etcIncome', label: '기타 수입', emoji: '➕' },
 ];
 
+const DEFAULT_CATEGORIES = {
+  expense: DEFAULT_EXPENSE_CATEGORIES,
+  income: DEFAULT_INCOME_CATEGORIES,
+};
+
+/** 내역이 가리키는 분류가 지워졌을 때 대신 보여 줄 모양 */
+const UNKNOWN_CATEGORY = { label: '지운 분류', emoji: '❔' };
+
+let categoryCache = null;
+
+function cleanList(list, fallback) {
+  if (!Array.isArray(list)) return fallback.map((c) => ({ ...c }));
+  const seen = new Set();
+  const out = [];
+  for (const c of list) {
+    const value = String(c?.value || '').trim();
+    const label = String(c?.label || '').trim();
+    if (!value || !label || seen.has(value)) continue;
+    seen.add(value);
+    out.push({ value, label, emoji: String(c?.emoji || '').trim() || '📦' });
+  }
+  // 하나도 안 남으면 기본으로 되돌립니다. 빈 목록은 쓸 수가 없습니다.
+  return out.length ? out : fallback.map((c) => ({ ...c }));
+}
+
+/** 저장해 둔 분류를 읽어 메모리에 올립니다. 앱을 켤 때 한 번 부릅니다. */
+export async function loadCategories() {
+  const saved = await db.getMeta('categories', null);
+  categoryCache = {
+    expense: cleanList(saved?.expense, DEFAULT_EXPENSE_CATEGORIES),
+    income: cleanList(saved?.income, DEFAULT_INCOME_CATEGORIES),
+  };
+  return categoryCache;
+}
+
+export function allCategories() {
+  return categoryCache || DEFAULT_CATEGORIES;
+}
+
 export function categoriesFor(type) {
-  return type === 'income' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
+  return allCategories()[type === 'income' ? 'income' : 'expense'];
 }
 
 export function categoryInfo(value, type) {
   const list = categoriesFor(type);
-  return list.find((c) => c.value === value) || list[list.length - 1];
+  return list.find((c) => c.value === value) || { ...UNKNOWN_CATEGORY, value };
+}
+
+/** 겹치지 않는 새 분류 키 */
+export function newCategoryValue() {
+  return `c_${db.uid()}`;
+}
+
+/** 한쪽(지출 또는 수입) 분류 목록을 통째로 저장합니다. */
+export async function setCategories(type, list) {
+  const key = type === 'income' ? 'income' : 'expense';
+  const next = {
+    ...allCategories(),
+    [key]: cleanList(list, DEFAULT_CATEGORIES[key]),
+  };
+  await db.setMeta('categories', next);
+  categoryCache = next;
+  notifyChanged();
+  return next[key];
+}
+
+/** 기본 분류로 되돌립니다. 적어 둔 내역은 건드리지 않습니다. */
+export async function resetCategories(type) {
+  return setCategories(type, DEFAULT_CATEGORIES[type === 'income' ? 'income' : 'expense']);
+}
+
+/** 그 분류를 쓰고 있는 내역 수 */
+export async function countByCategory(value, type) {
+  const rows = await getAll();
+  const wantIncome = type === 'income';
+  return rows.filter((r) => r.category === value && (r.type === 'income') === wantIncome).length;
+}
+
+/** 분류를 지우면서, 그 분류를 쓰던 내역을 다른 분류로 옮깁니다. */
+export async function replaceCategory(from, to, type) {
+  const rows = await getAll();
+  const wantIncome = type === 'income';
+  const hit = rows.filter((r) => r.category === from && (r.type === 'income') === wantIncome);
+  for (const r of hit) await db.put('expenses', { ...r, category: to, updatedAt: Date.now() });
+  if (hit.length) notifyChanged();
+  return hit.length;
 }
 
 export function methodInfo(value) {

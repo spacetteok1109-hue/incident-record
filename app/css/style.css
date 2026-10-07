@@ -1493,6 +1493,66 @@ select {
 }
 .emoji-pick[aria-pressed='true'] { border-color: var(--accent); }
 
+/* 분류 고치기 */
+.cat-manage { display: flex; flex-direction: column; gap: 6px; }
+.cat-manage-row {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+}
+.cm-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-align: left;
+  padding: 11px 12px;
+  background: var(--bg-elev-2);
+  border-radius: var(--radius-sm);
+}
+.cm-main:active { background: var(--line-soft); }
+.cm-emoji { font-size: 18px; flex: none; }
+.cm-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cm-edit { flex: none; display: flex; color: var(--text-faint); }
+.cm-move {
+  flex: none;
+  width: 38px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-sm);
+  color: var(--text-dim);
+  font-size: 15px;
+  font-weight: 700;
+}
+.cm-move:active { background: var(--bg-elev-2); }
+.cm-move:disabled { opacity: 0.3; }
+.cat-manage-foot { margin-top: 12px; }
+
+/* 아이콘 직접 쓰기 */
+.emoji-input {
+  text-align: center;
+  font-size: 22px;
+  line-height: 1.4;
+}
+
+/* 칸 제목 오른쪽에 붙는 작은 글자 버튼 */
+.field > label { display: flex; align-items: center; gap: 8px; }
+.field-link {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent-ink);
+  padding: 2px 4px;
+}
+
 /* ---------------- 설정 ---------------- */
 
 .settings-group {

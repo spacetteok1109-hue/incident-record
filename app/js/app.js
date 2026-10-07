@@ -14,7 +14,7 @@ import {
   relativeDateLabel, diffDays, periodProgress, formatRange, REPEAT_LABELS, bytesToText, debounce,
 } from './util.js';
 
-const APP_VERSION = '2.7.0';
+const APP_VERSION = '2.8.0';
 
 const state = {
   tab: 'calendar',
@@ -41,6 +41,7 @@ async function boot() {
   await db.openDB();
   await store.ensureSeed();
   state.settings = { ...state.settings, ...(await db.getMeta('settings', {})) };
+  await money.loadCategories();
   applyTheme(state.settings.theme);
   await store.migrateEventsToTasks();
   await store.rollForwardRepeats();
@@ -1293,6 +1294,230 @@ async function openCardSettings() {
   render();
 }
 
+/* ---------------- 가계부 분류 고치기 ---------------- */
+
+/* 고를 수 있는 아이콘. 여기 없는 것은 직접 써 넣으면 됩니다. */
+const CATEGORY_EMOJIS = [
+  '🍚', '🍜', '🍗', '☕', '🍰', '🍺', '🛒', '🏠', '🧻', '🚌', '🚗', '⛽',
+  '✈️', '🏨', '🛍️', '👕', '👟', '💊', '🏥', '💇', '💅', '🎬', '🎮', '📚',
+  '🎵', '🏃', '🐾', '🎁', '💐', '📱', '💡', '💧', '🔥', '📦', '💰', '🧧',
+  '↩️', '➕', '🏦', '📈',
+];
+
+/** 분류 목록을 고치는 시트. 바뀌는 대로 바로 저장합니다. */
+export async function openCategoryManager(startType = 'expense') {
+  let type = startType === 'income' ? 'income' : 'expense';
+
+  await openSheet({
+    title: '가계부 분류',
+    showConfirm: false,
+    cancelLabel: '닫기',
+    buildBody: ({ body }) => {
+      const seg = el('div', { class: 'seg' });
+      const list = el('div', { class: 'cat-manage' });
+      const foot = el('div', { class: 'cat-manage-foot' });
+
+      [['expense', '지출'], ['income', '수입']].forEach(([value, label]) => {
+        seg.append(el('button', {
+          type: 'button',
+          text: label,
+          'aria-pressed': String(type === value),
+          onclick: () => {
+            if (type === value) return;
+            type = value;
+            [...seg.children].forEach((b, i) =>
+              b.setAttribute('aria-pressed', String(['expense', 'income'][i] === type)));
+            draw();
+          },
+        }));
+      });
+      body.append(seg);
+
+      body.append(el('div', { class: 'hint' }, [
+        el('span', { text: '이름과 아이콘을 바꾸거나, 새로 더하거나, 순서를 옮길 수 있습니다. ' }),
+        el('span', { class: 'strong', text: '분류를 지워도 적어 둔 금액은 사라지지 않습니다.' }),
+      ]));
+      body.append(list);
+      body.append(foot);
+
+      async function save(next) {
+        await money.setCategories(type, next);
+        draw();
+      }
+
+      function draw() {
+        const cats = money.categoriesFor(type);
+        list.replaceChildren();
+
+        cats.forEach((c, i) => {
+          list.append(el('div', { class: 'cat-manage-row' }, [
+            el('button', {
+              type: 'button',
+              class: 'cm-main',
+              onclick: () => openCategoryEditor(type, c, draw),
+            }, [
+              el('span', { class: 'cm-emoji', text: c.emoji }),
+              el('span', { class: 'cm-name', text: c.label }),
+              el('span', { class: 'cm-edit' }, [icon('edit', { size: 15 })]),
+            ]),
+            el('button', {
+              type: 'button', class: 'cm-move', 'aria-label': `${c.label} 위로`,
+              disabled: i === 0,
+              onclick: () => {
+                const next = cats.slice();
+                [next[i - 1], next[i]] = [next[i], next[i - 1]];
+                save(next);
+              },
+            }, ['↑']),
+            el('button', {
+              type: 'button', class: 'cm-move', 'aria-label': `${c.label} 아래로`,
+              disabled: i === cats.length - 1,
+              onclick: () => {
+                const next = cats.slice();
+                [next[i + 1], next[i]] = [next[i], next[i + 1]];
+                save(next);
+              },
+            }, ['↓']),
+          ]));
+        });
+
+        foot.replaceChildren(
+          el('button', {
+            type: 'button', class: 'btn-ghost', text: '＋ 분류 추가',
+            onclick: () => openCategoryEditor(type, null, draw),
+          }),
+          el('button', {
+            type: 'button', class: 'btn', style: { marginTop: '8px' },
+            text: '기본 분류로 되돌리기',
+            onclick: async () => {
+              const ok = await confirmDialog({
+                title: '기본 분류로 되돌리기',
+                message: `${type === 'income' ? '수입' : '지출'} 분류를 처음 상태로 되돌립니다. 적어 둔 금액은 그대로입니다.`,
+                confirmLabel: '되돌리기',
+              });
+              if (!ok) return;
+              await money.resetCategories(type);
+              toast('기본 분류로 되돌렸습니다.');
+              draw();
+            },
+          }),
+        );
+      }
+
+      draw();
+    },
+  });
+  render();
+}
+
+/** 분류 하나를 만들거나 고치는 시트 */
+async function openCategoryEditor(type, cat, onDone) {
+  const isNew = !cat;
+  const draft = isNew
+    ? { value: money.newCategoryValue(), label: '', emoji: '📦' }
+    : { ...cat };
+
+  await openSheet({
+    title: isNew ? '새 분류' : '분류 수정',
+    confirmLabel: '저장',
+    buildBody: ({ body, close }) => {
+      body.append(field('이름', el('input', {
+        type: 'text',
+        value: draft.label,
+        placeholder: '예) 반려동물',
+        maxlength: '20',
+        'data-autofocus': '',
+        oninput: (e) => { draft.label = e.target.value; },
+      })));
+
+      const typed = el('input', {
+        type: 'text',
+        class: 'emoji-input',
+        value: draft.emoji,
+        maxlength: '4',
+        'aria-label': '아이콘 직접 쓰기',
+        oninput: (e) => {
+          draft.emoji = e.target.value;
+          mark();
+        },
+      });
+      const grid = el('div', { class: 'emoji-row' });
+      CATEGORY_EMOJIS.forEach((em) => {
+        grid.append(el('button', {
+          type: 'button', class: 'emoji-pick', text: em,
+          onclick: () => { draft.emoji = em; typed.value = em; mark(); },
+        }));
+      });
+      const mark = () => [...grid.children].forEach((b) =>
+        b.setAttribute('aria-pressed', String(b.textContent === draft.emoji)));
+      mark();
+      body.append(field('아이콘', typed, grid));
+
+      if (!isNew) {
+        body.append(el('button', {
+          type: 'button',
+          class: 'btn danger',
+          style: { marginTop: '6px' },
+          text: '이 분류 지우기',
+          onclick: async () => {
+            if (await deleteCategory(type, cat)) close(null);
+          },
+        }));
+      }
+    },
+    onConfirm: async () => {
+      const label = draft.label.trim();
+      if (!label) {
+        toast('이름을 적어 주세요.');
+        return false;
+      }
+      const cats = money.categoriesFor(type);
+      const next = isNew
+        ? [...cats, { ...draft, label }]
+        : cats.map((c) => (c.value === draft.value ? { ...draft, label } : c));
+      await money.setCategories(type, next);
+      return true;
+    },
+  });
+
+  if (onDone) onDone();
+}
+
+/** 분류를 지웁니다. 쓰고 있는 내역이 있으면 옮길 곳을 먼저 고릅니다. */
+async function deleteCategory(type, cat) {
+  const cats = money.categoriesFor(type);
+  if (cats.length <= 1) {
+    toast('분류는 하나 이상 있어야 합니다.');
+    return false;
+  }
+
+  const used = await money.countByCategory(cat.value, type);
+  let moveTo = null;
+
+  if (used) {
+    const others = cats.filter((c) => c.value !== cat.value);
+    moveTo = await pickerSheet({
+      title: `${cat.label} 내역 ${used}건을 어디로 옮길까요?`,
+      value: others[0].value,
+      options: others.map((c) => ({ value: c.value, label: c.label, emoji: c.emoji })),
+    });
+    if (moveTo === null) return false;
+  } else {
+    const ok = await confirmDialog({
+      title: '분류 삭제',
+      message: `'${cat.label}' 분류를 지울까요?`,
+      confirmLabel: '삭제',
+      danger: true,
+    });
+    if (!ok) return false;
+  }
+
+  if (moveTo) await money.replaceCategory(cat.value, moveTo, type);
+  await money.setCategories(type, cats.filter((c) => c.value !== cat.value));
+  toast(used ? `${used}건을 옮기고 지웠습니다.` : '지웠습니다.');
+  return true;
+}
+
 function statTile(label, value, sub, kind) {
   return el('div', { class: `stat-tile ${kind}` }, [
     el('div', { class: 'stat-label', text: label }),
@@ -1485,6 +1710,22 @@ async function renderSettings() {
     }));
   }
   content.push(lockGroup);
+
+  /* 가계부 */
+  const moneyGroup = group('가계부');
+  const cats = money.allCategories();
+  moneyGroup.append(settingsRow({
+    label: '분류 고치기',
+    desc: '이름·아이콘을 바꾸거나 새 분류를 더합니다.',
+    value: `지출 ${cats.expense.length} · 수입 ${cats.income.length}`,
+    onclick: () => openCategoryManager('expense'),
+  }));
+  moneyGroup.append(settingsRow({
+    label: '카드 결제 주기',
+    desc: '합산 마감일과 결제일을 정합니다.',
+    onclick: openCardSettings,
+  }));
+  content.push(moneyGroup);
 
   /* 표시 */
   const viewGroup = group('표시');
