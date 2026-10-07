@@ -1062,6 +1062,50 @@ main {
 .money-num { font-variant-numeric: tabular-nums; font-weight: 700; }
 .money-num.income { color: var(--ok); }
 
+/* 결제수단 고르기 — 가로로 밀지 않고 한 번에 다 보이도록 두 칸씩 놓습니다. */
+.method-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+  margin-bottom: 10px;
+}
+/* 홀수로 남은 마지막 칩은 한 줄을 다 씁니다. */
+.method-chip:last-child:nth-child(odd) { grid-column: 1 / -1; }
+.method-chip {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  padding: 10px 12px;
+  text-align: left;
+  background: var(--bg-elev);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-sm);
+}
+.method-chip:active { background: var(--bg-elev-2); }
+.method-chip.on {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.mc-label {
+  flex: none;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+.mc-amount {
+  flex: 1;
+  min-width: 0;
+  text-align: right;
+  font-size: 12.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.method-chip.on .mc-label,
+.method-chip.on .mc-amount { color: var(--accent-ink); }
+
 .stat-row {
   display: grid;
   grid-template-columns: repeat(2, 1fr);

@@ -143,13 +143,35 @@ export function formatMonth(key) {
   return `${y}년 ${m}월`;
 }
 
-export async function forMonth(monthKey) {
+/** 'all'(또는 빈 값)이면 전부, 아니면 그 결제수단만 통과시킵니다. */
+export function matchesMethod(row, method) {
+  return !method || method === 'all' || row.method === method;
+}
+
+export async function forMonth(monthKey, { method = 'all' } = {}) {
   const rows = await getAll();
   return rows
-    .filter((r) => monthKeyOf(r.date) === monthKey)
+    .filter((r) => monthKeyOf(r.date) === monthKey && matchesMethod(r, method))
     .sort((a, b) => (a.date === b.date
       ? (b.createdAt || 0) - (a.createdAt || 0)
       : (a.date < b.date ? 1 : -1)));
+}
+
+/**
+ * 그 달의 결제수단별 지출 합계. all 은 전체 합계입니다.
+ * 수단을 골라 보는 칩에 그대로 씁니다.
+ */
+export async function methodTotals(monthKey) {
+  const rows = (await getAll())
+    .filter((r) => monthKeyOf(r.date) === monthKey && r.type !== 'income');
+  const out = { all: 0 };
+  for (const m of METHODS) out[m.value] = 0;
+  for (const r of rows) {
+    const n = Math.round(Number(r.amount) || 0);
+    out.all += n;
+    if (out[r.method] !== undefined) out[r.method] += n;
+  }
+  return out;
 }
 
 export async function forDate(dateKey) {
@@ -185,9 +207,10 @@ function sum(rows) {
  *  month  — 이번(선택한) 달에 쓴 돈
  *  credit — 그 달 신용카드 사용액
  *  income — 그 달 수입
+ * method 를 주면 그 결제수단만 세어 줍니다.
  */
-export async function summary(monthKey = thisMonthKey()) {
-  const rows = await getAll();
+export async function summary(monthKey = thisMonthKey(), { method = 'all' } = {}) {
+  const rows = (await getAll()).filter((r) => matchesMethod(r, method));
   const today = todayKey();
   const inMonth = rows.filter((r) => monthKeyOf(r.date) === monthKey);
   const spend = inMonth.filter((r) => r.type !== 'income');
@@ -205,8 +228,8 @@ export async function summary(monthKey = thisMonthKey()) {
 }
 
 /** 그 달의 분류별 지출 (많은 순) */
-export async function byCategory(monthKey) {
-  const rows = (await forMonth(monthKey)).filter((r) => r.type !== 'income');
+export async function byCategory(monthKey, { method = 'all' } = {}) {
+  const rows = (await forMonth(monthKey, { method })).filter((r) => r.type !== 'income');
   const map = new Map();
   for (const r of rows) {
     map.set(r.category, (map.get(r.category) || 0) + (Number(r.amount) || 0));
