@@ -1,7 +1,7 @@
 /* store.js — 도메인 계층 (폴더 / 항목 / 사진 메타) */
 
 import * as db from './db.js';
-import { toTimestamp, todayKey, nextRepeatDate, toDateKey, fromDateKey, REPEAT_LABELS } from './util.js';
+import { toTimestamp, todayKey, nextRepeatDate, toDateKey, fromDateKey, REPEAT_LABELS, THEMES } from './util.js';
 
 export const FOLDER_COLORS = [
   '#5865f2', '#e0567a', '#f0913a', '#3fb27f',
@@ -451,12 +451,19 @@ export async function exportBackup(includePhotos = true) {
   }
   return {
     app: 'todo-cal',
-    version: 1,
+    version: 2,
     exportedAt: new Date().toISOString(),
     folders,
     items,
     expenses,
     photos: outPhotos,
+    // 기기를 옮겨도 다시 만들지 않도록 설정도 담습니다.
+    // 앱 아이콘과 PIN 은 그 기기에 두는 것이라 넣지 않습니다.
+    prefs: {
+      settings: await db.getMeta('settings', null),
+      categories: await db.getMeta('categories', null),
+      cardSettings: await db.getMeta('cardSettings', null),
+    },
   };
 }
 
@@ -537,6 +544,86 @@ function cleanExpense(r) {
   };
 }
 
+/* 백업에 담긴 설정도 바깥 자료이므로 아는 값만 골라 씁니다. */
+
+/* 참/거짓 칸: 제대로 된 불리언이면 그대로, 없으면 기본값, 그 밖에는 참거짓으로 바꿉니다.
+   'v !== false' 로만 보면 0 이나 '' 같은 값이 참으로 남습니다. */
+function flag(v, dflt) {
+  if (typeof v === 'boolean') return v;
+  if (v === undefined || v === null) return dflt;
+  return !!v;
+}
+
+function cleanSettings(v) {
+  if (!v || typeof v !== 'object') return null;
+  return {
+    theme: THEMES.includes(v.theme) ? v.theme : 'auto',
+    hideCompleted: flag(v.hideCompleted, false),
+    showBadge: flag(v.showBadge, true),
+    showDdayOnCalendar: flag(v.showDdayOnCalendar, true),
+  };
+}
+
+function cleanCategoryList(list) {
+  if (!Array.isArray(list)) return null;
+  const seen = new Set();
+  const out = [];
+  for (const c of list.slice(0, 200)) {
+    const value = str(c?.value, 64).trim();
+    const label = str(c?.label, 20).trim();
+    if (!value || !label || seen.has(value)) continue;
+    seen.add(value);
+    out.push({ value, label, emoji: str(c?.emoji, 8).trim() || '📦' });
+  }
+  return out.length ? out : null;
+}
+
+function cleanCategories(v) {
+  if (!v || typeof v !== 'object') return null;
+  const expense = cleanCategoryList(v.expense);
+  const income = cleanCategoryList(v.income);
+  if (!expense && !income) return null;
+  return { ...(expense ? { expense } : {}), ...(income ? { income } : {}) };
+}
+
+function cleanCardSettings(v) {
+  if (!v || typeof v !== 'object') return null;
+  const day = (n, fallback) => {
+    const d = Math.round(num(n));
+    return d >= 0 && d <= 31 ? d : fallback;
+  };
+  const prepaid = {};
+  for (const [key, amount] of Object.entries(v.prepaid || {})) {
+    if (!/^\d{4}-\d{2}$/.test(key)) continue;
+    if (amount === true) { prepaid[key] = true; continue; }
+    const n = Math.round(num(amount));
+    if (n > 0) prepaid[key] = n;
+  }
+  return {
+    closingDay: day(v.closingDay, 0),
+    paymentDay: day(v.paymentDay, 25) || 25,
+    paymentNextMonth: flag(v.paymentNextMonth, true),
+    prepaid,
+  };
+}
+
+/** 백업에 담긴 설정을 기기에 씁니다. 담긴 것만 덮어씁니다. */
+async function applyPrefs(prefs) {
+  if (!prefs || typeof prefs !== 'object') return 0;
+  const pairs = [
+    ['settings', cleanSettings(prefs.settings)],
+    ['categories', cleanCategories(prefs.categories)],
+    ['cardSettings', cleanCardSettings(prefs.cardSettings)],
+  ];
+  let n = 0;
+  for (const [key, value] of pairs) {
+    if (!value) continue;
+    await db.setMeta(key, value);
+    n += 1;
+  }
+  return n;
+}
+
 export async function importBackup(data, mode = 'merge') {
   if (!data || typeof data !== 'object' || data.app !== 'todo-cal') {
     throw new Error('이 앱의 백업 파일이 아닙니다.');
@@ -583,6 +670,10 @@ export async function importBackup(data, mode = 'merge') {
   if (expenses.length) await db.putAll('expenses', expenses);
   if (photos.length) await db.putAll('photos', photos);
 
+  // 설정은 '덮어쓰기' 일 때만 가져옵니다. '합치기' 는 이 기기에서 쓰던
+  // 분류·카드 주기·테마를 그대로 두는 쪽이 덜 놀랍습니다.
+  const prefs = mode === 'replace' ? await applyPrefs(data.prefs) : 0;
+
   invalidate();
   emit();
   return {
@@ -590,6 +681,7 @@ export async function importBackup(data, mode = 'merge') {
     items: items.length,
     expenses: expenses.length,
     photos: photos.length,
+    prefs,
     skipped: badPhotos
       + Math.max(0, (data.folders?.length || 0) - folders.length)
       + Math.max(0, (data.items?.length || 0) - items.length)

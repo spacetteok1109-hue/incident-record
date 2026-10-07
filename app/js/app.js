@@ -14,7 +14,7 @@ import {
   relativeDateLabel, diffDays, periodProgress, formatRange, REPEAT_LABELS, bytesToText, debounce,
 } from './util.js';
 
-const APP_VERSION = '2.9.0';
+const APP_VERSION = '2.10.0';
 
 const state = {
   tab: 'calendar',
@@ -1910,7 +1910,8 @@ async function renderSettings() {
   const dataGroup = group('데이터');
   dataGroup.append(settingsRow({
     label: '백업 파일 내보내기',
-    desc: '할 일·폴더·사진을 JSON 파일 하나로 저장합니다. 기기를 바꿀 때 사용하세요.',
+    desc: '할 일·폴더·사진·가계부와 설정(분류·카드 주기·테마)을 JSON 파일 하나로 저장합니다. '
+      + '앱 아이콘과 PIN은 기기에 두고 담지 않습니다.',
     onclick: exportData,
   }));
   dataGroup.append(settingsRow({
@@ -2086,8 +2087,16 @@ function importData() {
       const mode = await pickerSheet({
         title: '가져오기 방식',
         options: [
-          { value: 'merge', label: '합치기', desc: '지금 데이터를 두고 백업 내용을 더합니다.' },
-          { value: 'replace', label: '덮어쓰기', desc: '지금 데이터를 모두 지우고 백업으로 바꿉니다.' },
+          {
+            value: 'merge',
+            label: '합치기',
+            desc: '지금 데이터를 두고 백업 내용을 더합니다. 분류·카드 주기·테마는 이 기기 것을 그대로 둡니다.',
+          },
+          {
+            value: 'replace',
+            label: '덮어쓰기',
+            desc: '지금 데이터를 모두 지우고 백업으로 바꿉니다. 분류·카드 주기·테마도 백업 쪽을 따릅니다.',
+          },
         ],
       });
       if (!mode) return;
@@ -2102,8 +2111,20 @@ function importData() {
         media.releasePhotoURLs();
       }
       const n = await store.importBackup(data, mode);
-      const skipped = n.skipped ? ` (형식이 안 맞는 ${n.skipped}개는 건너뜀)` : '';
-      toast(`항목 ${n.items}개, 폴더 ${n.folders}개, 가계부 ${n.expenses}건, 사진 ${n.photos}장을 가져왔습니다.${skipped}`);
+
+      // 가져온 설정을 지금 화면에 바로 입힙니다.
+      if (n.prefs) {
+        state.settings = { ...state.settings, ...(await db.getMeta('settings', {})) };
+        applyTheme(state.settings.theme);
+        await money.loadCategories();
+      }
+
+      const extra = [
+        n.prefs ? '설정도 가져왔습니다.' : '',
+        n.skipped ? `형식이 안 맞는 ${n.skipped}개는 건너뛰었습니다.` : '',
+      ].filter(Boolean).join(' ');
+      toast(`항목 ${n.items}개, 폴더 ${n.folders}개, 가계부 ${n.expenses}건, 사진 ${n.photos}장을 가져왔습니다.`
+        + (extra ? ` ${extra}` : ''));
       render();
     } catch (e) {
       console.error(e);
