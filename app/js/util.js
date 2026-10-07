@@ -186,6 +186,9 @@ export function periodProgress(startKey, endKey, baseKey = todayKey()) {
   return { total, phase: 'during', elapsed, remaining: total - elapsed, percent: Math.round((elapsed / total) * 100) };
 }
 
+/* 고를 수 있는 테마 아이디. 백업을 읽어 들일 때 검사용으로도 씁니다. */
+export const THEMES = ['auto', 'dark', 'light', 'sky', 'mono', 'sunny', 'modern'];
+
 export const REPEAT_LABELS = {
   none: '반복 안 함',
   daily: '매일',
