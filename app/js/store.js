@@ -1,7 +1,7 @@
 /* store.js — 도메인 계층 (폴더 / 항목 / 사진 메타) */
 
 import * as db from './db.js';
-import { toTimestamp, todayKey, nextRepeatDate, toDateKey, fromDateKey } from './util.js';
+import { toTimestamp, todayKey, nextRepeatDate, toDateKey, fromDateKey, REPEAT_LABELS } from './util.js';
 
 export const FOLDER_COLORS = [
   '#5865f2', '#e0567a', '#f0913a', '#3fb27f',
@@ -460,36 +460,140 @@ export async function exportBackup(includePhotos = true) {
   };
 }
 
+/* ---------------- 백업 읽어 들이기 ----------------
+   백업 파일은 바깥에서 온 자료입니다. 우리가 아는 칸만 골라 담고,
+   모양이 안 맞는 줄은 버립니다. 통째로 집어넣으면 화면이 깨지거나
+   엉뚱한 값이 섞여 들어옵니다.
+*/
+
+const str = (v, max = 500) => (typeof v === 'string' ? v.slice(0, max) : '');
+const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
+const bool = (v) => !!v;
+const dateKey = (v) => (/^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null);
+const timeKey = (v) => (/^\d{2}:\d{2}$/.test(v) ? v : null);
+const id = (v) => (typeof v === 'string' && v && v.length <= 64 ? v : null);
+
+function cleanFolder(f) {
+  if (!f || !id(f.id)) return null;
+  return {
+    id: f.id,
+    name: str(f.name, 40) || '이름 없음',
+    emoji: str(f.emoji, 8) || '📁',
+    color: /^#[0-9a-f]{3,8}$/i.test(f.color) ? f.color : FOLDER_COLORS[0],
+    order: num(f.order),
+    createdAt: num(f.createdAt) || Date.now(),
+  };
+}
+
+function cleanChecklist(list) {
+  if (!Array.isArray(list)) return [];
+  return list.slice(0, 200).map((c) => ({
+    id: id(c?.id) || db.uid(),
+    text: str(c?.text, 200),
+    done: bool(c?.done),
+  })).filter((c) => c.text);
+}
+
+function cleanItem(it) {
+  if (!it || !id(it.id)) return null;
+  const type = it.type === 'dday' ? 'dday' : 'task';
+  return {
+    id: it.id,
+    type,
+    title: str(it.title, 200) || '제목 없음',
+    memo: str(it.memo, 5000),
+    folderId: id(it.folderId),
+    startDate: dateKey(it.startDate),
+    dueDate: dateKey(it.dueDate),
+    dueTime: timeKey(it.dueTime),
+    remindAt: num(it.remindAt) || null,
+    repeat: typeof it.repeat === 'string' && it.repeat in REPEAT_LABELS ? it.repeat : 'none',
+    checklist: cleanChecklist(it.checklist),
+    photoIds: Array.isArray(it.photoIds) ? it.photoIds.filter(id).slice(0, 50) : [],
+    showAsBar: it.showAsBar !== false,
+    pinned: bool(it.pinned),
+    done: bool(it.done),
+    doneAt: num(it.doneAt) || null,
+    createdAt: num(it.createdAt) || Date.now(),
+    updatedAt: num(it.updatedAt) || Date.now(),
+  };
+}
+
+function cleanExpense(r) {
+  if (!r || !id(r.id)) return null;
+  const date = dateKey(r.date);
+  if (!date) return null;
+  return {
+    id: r.id,
+    date,
+    type: r.type === 'income' ? 'income' : 'expense',
+    amount: Math.max(0, Math.round(num(r.amount))),
+    method: str(r.method, 20) || 'cash',
+    category: str(r.category, 64) || 'etc',
+    memo: str(r.memo, 200),
+    installment: Math.min(36, Math.max(1, Math.round(num(r.installment)) || 1)),
+    createdAt: num(r.createdAt) || Date.now(),
+    updatedAt: num(r.updatedAt) || Date.now(),
+  };
+}
+
 export async function importBackup(data, mode = 'merge') {
-  if (!data || data.app !== 'todo-cal') throw new Error('이 앱의 백업 파일이 아닙니다.');
+  if (!data || typeof data !== 'object' || data.app !== 'todo-cal') {
+    throw new Error('이 앱의 백업 파일이 아닙니다.');
+  }
+
+  const pick = (key, fn) => (Array.isArray(data[key]) ? data[key] : [])
+    .slice(0, 20000).map(fn).filter(Boolean);
+
+  const folders = pick('folders', cleanFolder);
+  const items = pick('items', cleanItem);
+  const expenses = pick('expenses', cleanExpense);
+
+  const photos = [];
+  let badPhotos = 0;
+  for (const p of (Array.isArray(data.photos) ? data.photos : []).slice(0, 5000)) {
+    if (!p || !id(p.id)) { badPhotos += 1; continue; }
+    try {
+      const blob = dataURLToBlob(p.data);
+      photos.push({
+        id: p.id,
+        itemId: id(p.itemId),
+        name: str(p.name, 120) || 'photo.jpg',
+        type: blob.type,
+        createdAt: num(p.createdAt) || Date.now(),
+        width: num(p.width),
+        height: num(p.height),
+        size: blob.size,
+        blob,
+        thumb: p.thumb ? dataURLToBlob(p.thumb) : null,
+      });
+    } catch {
+      badPhotos += 1;   // 형식이 안 맞는 사진은 버리고 나머지는 살립니다.
+    }
+  }
+
   if (mode === 'replace') {
     await Promise.all([
       db.clearStore('folders'), db.clearStore('items'),
       db.clearStore('photos'), db.clearStore('expenses'),
     ]);
   }
-  if (Array.isArray(data.folders) && data.folders.length) await db.putAll('folders', data.folders);
-  if (Array.isArray(data.items) && data.items.length) await db.putAll('items', data.items);
-  if (Array.isArray(data.expenses) && data.expenses.length) await db.putAll('expenses', data.expenses);
-  if (Array.isArray(data.photos) && data.photos.length) {
-    const rows = [];
-    for (const p of data.photos) {
-      rows.push({
-        id: p.id, itemId: p.itemId, name: p.name, type: p.type,
-        createdAt: p.createdAt, width: p.width, height: p.height,
-        blob: await dataURLToBlob(p.data),
-        thumb: p.thumb ? await dataURLToBlob(p.thumb) : null,
-      });
-    }
-    await db.putAll('photos', rows);
-  }
+  if (folders.length) await db.putAll('folders', folders);
+  if (items.length) await db.putAll('items', items);
+  if (expenses.length) await db.putAll('expenses', expenses);
+  if (photos.length) await db.putAll('photos', photos);
+
   invalidate();
   emit();
   return {
-    folders: (data.folders || []).length,
-    items: (data.items || []).length,
-    expenses: (data.expenses || []).length,
-    photos: (data.photos || []).length,
+    folders: folders.length,
+    items: items.length,
+    expenses: expenses.length,
+    photos: photos.length,
+    skipped: badPhotos
+      + Math.max(0, (data.folders?.length || 0) - folders.length)
+      + Math.max(0, (data.items?.length || 0) - items.length)
+      + Math.max(0, (data.expenses?.length || 0) - expenses.length),
   };
 }
 
@@ -502,9 +606,22 @@ export function blobToDataURL(blob) {
   });
 }
 
-export async function dataURLToBlob(url) {
-  const res = await fetch(url);
-  return res.blob();
+/* 백업에 담긴 사진은 반드시 data:image/... 형태여야 합니다.
+   바깥 주소(http:, blob: 등)를 받아 fetch 하면, 기기 안에만 둔다는 약속을 깨고
+   가져오기만 해도 바깥으로 신호가 나갑니다. 그래서 직접 해독합니다. */
+const DATA_IMAGE_RE = /^data:(image\/(?:png|jpeg|jpg|webp|gif|avif));base64,([A-Za-z0-9+/=\s]+)$/i;
+const MAX_PHOTO_BYTES = 12 * 1024 * 1024;
+
+export function dataURLToBlob(url) {
+  const m = DATA_IMAGE_RE.exec(String(url || '').trim());
+  if (!m) throw new Error('사진 형식이 올바르지 않습니다.');
+  const type = m[1].toLowerCase() === 'image/jpg' ? 'image/jpeg' : m[1].toLowerCase();
+  const bin = atob(m[2].replace(/\s+/g, ''));
+  if (bin.length > MAX_PHOTO_BYTES) throw new Error('사진이 너무 큽니다.');
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i += 1) bytes[i] = bin.charCodeAt(i);
+  // 형식을 우리가 정해 둡니다. text/html 같은 걸 넣어 blob 주소로 열리는 길을 막습니다.
+  return new Blob([bytes], { type });
 }
 
 export async function wipeAll() {

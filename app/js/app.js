@@ -14,7 +14,7 @@ import {
   relativeDateLabel, diffDays, periodProgress, formatRange, REPEAT_LABELS, bytesToText, debounce,
 } from './util.js';
 
-const APP_VERSION = '2.8.0';
+const APP_VERSION = '2.9.0';
 
 const state = {
   tab: 'calendar',
@@ -42,6 +42,7 @@ async function boot() {
   await store.ensureSeed();
   state.settings = { ...state.settings, ...(await db.getMeta('settings', {})) };
   await money.loadCategories();
+  await applyAppIcon();
   applyTheme(state.settings.theme);
   await store.migrateEventsToTasks();
   await store.rollForwardRepeats();
@@ -1294,6 +1295,113 @@ async function openCardSettings() {
   render();
 }
 
+/* ---------------- 앱 아이콘 ---------------- */
+
+let iconURLs = [];
+
+/** 고른 아이콘을 지금 화면(탭 아이콘·아이폰 홈 아이콘)에 바로 입힙니다. */
+async function applyAppIcon() {
+  iconURLs.forEach((u) => URL.revokeObjectURL(u));
+  iconURLs = [];
+
+  const saved = await media.getAppIcon();
+  const set = (selector, blob, fallback) => {
+    const link = $(selector);
+    if (!link) return;
+    if (blob) {
+      const url = URL.createObjectURL(blob);
+      iconURLs.push(url);
+      link.href = url;
+    } else {
+      link.href = fallback;
+    }
+  };
+  set('#app-favicon', saved?.i192, './icons/icon-192.png');
+  set('link[rel="apple-touch-icon"]', saved?.i180, './icons/apple-touch-icon.png');
+}
+
+async function openIconSheet() {
+  await openSheet({
+    title: '앱 아이콘',
+    showConfirm: false,
+    cancelLabel: '닫기',
+    buildBody: ({ body }) => {
+      const preview = el('div', { class: 'icon-preview' });
+      const foot = el('div', { class: 'icon-foot' });
+
+      body.append(el('div', { class: 'hint' }, [
+        el('span', {
+          text: '가지고 있는 사진으로 홈 화면 아이콘을 바꿉니다. 가운데를 정사각형으로 잘라 쓰며, '
+            + '기기에 따라 모서리가 둥글게 더 잘릴 수 있습니다. ',
+        }),
+        el('span', { class: 'strong', text: '사진은 이 기기 밖으로 나가지 않습니다.' }),
+      ]));
+      body.append(preview);
+      body.append(foot);
+
+      const file = el('input', {
+        type: 'file',
+        accept: 'image/*',
+        class: 'hidden',
+        onchange: async () => {
+          const f = file.files && file.files[0];
+          file.value = '';
+          if (!f) return;
+          try {
+            await media.setAppIcon(f);
+            await applyAppIcon();
+            toast('아이콘을 바꿨습니다.');
+            draw();
+          } catch (e) {
+            toast(e.message || '아이콘을 만들지 못했습니다.');
+          }
+        },
+      });
+      body.append(file);
+
+      async function draw() {
+        const saved = await media.getAppIcon();
+        const url = saved?.i512 ? URL.createObjectURL(saved.i512) : './icons/icon-512.png';
+        if (saved?.i512) iconURLs.push(url);
+
+        preview.replaceChildren(
+          el('img', { class: 'ip-img', src: url, alt: '지금 아이콘' }),
+          el('div', { class: 'ip-note', text: saved ? '내가 고른 사진' : '기본 아이콘' }),
+        );
+
+        foot.replaceChildren(
+          el('button', {
+            type: 'button', class: 'btn primary',
+            text: saved ? '다른 사진으로 바꾸기' : '사진 고르기',
+            onclick: () => file.click(),
+          }),
+          saved ? el('button', {
+            type: 'button', class: 'btn', style: { marginTop: '8px' },
+            text: '기본 아이콘으로 되돌리기',
+            onclick: async () => {
+              await media.clearAppIcon();
+              await applyAppIcon();
+              toast('기본 아이콘으로 되돌렸습니다.');
+              draw();
+            },
+          }) : null,
+          el('div', { class: 'hint', style: { marginTop: '12px' } }, [
+            el('span', { class: 'strong', text: '홈 화면 아이콘에 반영하려면 ' }),
+            el('span', {
+              text: '이미 추가해 둔 아이콘을 지우고 다시 추가해야 합니다. '
+                + '안드로이드·아이폰 모두 추가하는 순간의 그림을 복사해 두기 때문입니다. '
+                + '지워도 적어 둔 내용은 그대로 남습니다.',
+            }),
+          ]),
+        );
+      }
+
+      draw();
+    },
+  });
+  render();
+}
+
 /* ---------------- 가계부 분류 고치기 ---------------- */
 
 /* 고를 수 있는 아이콘. 여기 없는 것은 직접 써 넣으면 됩니다. */
@@ -1613,10 +1721,12 @@ async function renderSettings() {
 
   content.push(el('div', { class: 'notice' }, [
     el('span', { class: 'ico', text: '🔒' }),
-    el('span', {
-      html: '모든 데이터는 <b>이 기기 안에만</b> 저장됩니다. 인터넷으로 전송되거나 서버에 올라가지 않습니다. '
+    el('span', {}, [
+      '모든 데이터는 ',
+      el('b', { text: '이 기기 안에만' }),
+      ' 저장됩니다. 인터넷으로 전송되거나 서버에 올라가지 않습니다. '
         + '앱 데이터를 지우거나 브라우저 저장소를 비우면 복구할 수 없으니, 중요한 내용은 아래에서 백업해 두세요.',
-    }),
+    ]),
   ]));
 
   /* 알림 */
@@ -1663,7 +1773,9 @@ async function renderSettings() {
   const lockGroup = group('보안');
   lockGroup.append(settingsRow({
     label: '화면 잠금 (PIN)',
-    desc: lockOn ? '앱을 열 때 PIN을 물어봅니다.' : '숫자 4~10자리로 앱을 잠글 수 있습니다.',
+    desc: lockOn
+      ? '앱을 열 때 PIN을 물어봅니다. 화면을 가리는 잠금이며, 저장된 내용을 암호화하지는 않습니다.'
+      : '숫자 4~10자리로 앱을 잠급니다. 자리 수가 길수록 안전합니다.',
     value: lockOn ? '켜짐' : '꺼짐',
     onclick: async () => {
       if (lockOn) {
@@ -1729,6 +1841,12 @@ async function renderSettings() {
 
   /* 표시 */
   const viewGroup = group('표시');
+  viewGroup.append(settingsRow({
+    label: '앱 아이콘',
+    desc: '가진 사진으로 홈 화면 아이콘을 바꿉니다.',
+    value: (await media.getAppIcon()) ? '내 사진' : '기본',
+    onclick: openIconSheet,
+  }));
   viewGroup.append(settingsRow({
     label: '테마',
     value: THEME_LABELS[state.settings.theme] || '기기 설정',
@@ -1984,7 +2102,8 @@ function importData() {
         media.releasePhotoURLs();
       }
       const n = await store.importBackup(data, mode);
-      toast(`항목 ${n.items}개, 폴더 ${n.folders}개, 가계부 ${n.expenses}건, 사진 ${n.photos}장을 가져왔습니다.`);
+      const skipped = n.skipped ? ` (형식이 안 맞는 ${n.skipped}개는 건너뜀)` : '';
+      toast(`항목 ${n.items}개, 폴더 ${n.folders}개, 가계부 ${n.expenses}건, 사진 ${n.photos}장을 가져왔습니다.${skipped}`);
       render();
     } catch (e) {
       console.error(e);
@@ -2030,7 +2149,8 @@ function pinPrompt(title, message) {
 }
 
 
-function showLockScreen() {
+async function showLockScreen() {
+  const pinLen = await lock.pinLength();
   return new Promise((resolve) => {
     let pin = '';
     const dots = el('div', { class: 'lock-dots' });
@@ -2053,24 +2173,33 @@ function showLockScreen() {
 
     const submit = async () => {
       if (verifying) return;
+      const wait = await lock.lockoutRemainingMs();
+      if (wait > 0) {
+        err.textContent = `너무 여러 번 틀렸습니다. ${Math.ceil(wait / 1000)}초 뒤에 다시 해 주세요.`;
+        pin = '';
+        renderDots();
+        return;
+      }
       verifying = true;
       const ok = await lock.verify(pin);
       verifying = false;
       if (ok) { unlock(); return; }
-      err.textContent = 'PIN이 맞지 않습니다.';
+      const next = await lock.lockoutRemainingMs();
+      err.textContent = next > 0
+        ? `너무 여러 번 틀렸습니다. ${Math.ceil(next / 1000)}초 뒤에 다시 해 주세요.`
+        : 'PIN이 맞지 않습니다.';
       pin = '';
       renderDots();
       if (navigator.vibrate) navigator.vibrate(120);
     };
 
-    // 4자리 이상 입력하면 조용히 한 번 확인해 보고, 맞으면 바로 열립니다.
+    /* 자리 수를 다 채우면 한 번만 확인합니다.
+       예전처럼 4자리부터 계속 넣어 보면, 긴 PIN을 쓰는 사람이 치는 도중에
+       틀린 횟수만 쌓여 잠겨 버립니다. 자리 수를 모르면 → 를 눌러 확인합니다. */
     const tryAuto = debounce(async () => {
-      if (pin.length < 4 || verifying) return;
-      verifying = true;
-      const ok = await lock.verify(pin);
-      verifying = false;
-      if (ok) unlock();
-    }, 350);
+      if (verifying || pinLen === null || pin.length !== pinLen) return;
+      await submit();
+    }, 250);
 
     const keypad = el('div', { class: 'keypad' });
     ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'clear', '0', 'ok'].forEach((k) => {

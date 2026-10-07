@@ -8,6 +8,23 @@
   <meta name="theme-color" content="#0f1115" />
   <meta name="color-scheme" content="dark light" />
 
+  <!-- 바깥으로 나가거나 들어오는 길을 모두 막아 둡니다.
+       이 앱은 자기 파일만 읽고, 사진은 blob:/data: 로만 보여 줍니다. -->
+  <meta http-equiv="Content-Security-Policy" content="
+    default-src 'self';
+    script-src 'self';
+    style-src 'self';
+    img-src 'self' blob: data:;
+    font-src 'self';
+    media-src 'self' blob:;
+    connect-src 'self';
+    worker-src 'self';
+    manifest-src 'self';
+    object-src 'none';
+    base-uri 'none';
+    form-action 'none';
+    frame-src 'none'" />
+
   <!-- 홈 화면에 추가했을 때 앱처럼 보이도록 -->
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -16,15 +33,8 @@
   <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png" />
 
   <link rel="manifest" href="./manifest.webmanifest" />
-  <link rel="icon" href="./icons/icon-192.png" type="image/png" />
-  <script>
-    // 저장해 둔 테마를 스타일보다 먼저 적용해 첫 화면이 깜빡이지 않게 합니다.
-    try {
-      var t = localStorage.getItem('theme') || 'auto';
-      if (t === 'auto') t = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-      document.documentElement.setAttribute('data-theme', t);
-    } catch (e) { /* 저장을 막아 둔 브라우저 */ }
-  </script>
+  <link rel="icon" id="app-favicon" href="./icons/icon-192.png" type="image/png" />
+  <script src="./js/theme-boot.js"></script>
   <link rel="stylesheet" href="./css/style.css" />
 </head>
 <body>
