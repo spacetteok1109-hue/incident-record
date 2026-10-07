@@ -54,6 +54,57 @@ async function drawToBlob(bitmap, maxEdge, quality) {
   return { blob, w, h };
 }
 
+/* ---------------- 앱 아이콘 ----------------
+ * 고른 사진에서 가운데 정사각형만 잘라 아이콘 크기로 만듭니다.
+ * 홈 화면 아이콘은 PNG 라야 모서리 처리가 깔끔합니다.
+ */
+
+const ICON_SIZES = { i512: 512, i192: 192, i180: 180 };
+
+async function squarePng(bitmap, size) {
+  const sw = bitmap.width;
+  const sh = bitmap.height;
+  const edge = Math.min(sw, sh);
+  const sx = Math.round((sw - edge) / 2);
+  const sy = Math.round((sh - edge) / 2);
+
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(bitmap, sx, sy, edge, edge, 0, 0, size, size);
+  const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+  canvas.width = 0;
+  canvas.height = 0;
+  if (!blob) throw new Error('아이콘을 만들지 못했습니다.');
+  return blob;
+}
+
+/** 고른 사진으로 앱 아이콘 세 벌을 만들어 저장합니다. */
+export async function setAppIcon(file) {
+  if (!file || !file.type.startsWith('image/')) {
+    throw new Error('이미지 파일만 쓸 수 있습니다.');
+  }
+  const bitmap = await loadBitmap(file);
+  const out = { updatedAt: Date.now() };
+  for (const [key, size] of Object.entries(ICON_SIZES)) {
+    out[key] = await squarePng(bitmap, size);
+  }
+  if (bitmap.close) bitmap.close();
+  await db.setMeta('appIcon', out);
+  return out;
+}
+
+export async function getAppIcon() {
+  return db.getMeta('appIcon', null);
+}
+
+export async function clearAppIcon() {
+  await db.setMeta('appIcon', null);
+}
+
 /**
  * 파일을 축소해서 IndexedDB에 저장하고 사진 레코드를 돌려줍니다.
  * itemId는 나중에 항목을 저장할 때 attachPhotos()로 연결할 수 있습니다.

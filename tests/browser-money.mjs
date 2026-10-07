@@ -19,11 +19,6 @@ await page.evaluate(async () => {
   await money.setCardSettings({ closingDay: 0, paymentDay: 25, paymentNextMonth: true, prepaid: {} });
 });
 
-const money = (fn, arg) => page.evaluate(async ([src, a]) => {
-  const m = await import('./js/money.js');
-  return (new Function('m', 'a', `return (${src})(m, a);`))(m, a);
-}, [fn.toString(), arg]);
-
 /* ---------- 할부 입력 ---------- */
 
 await step('신용카드 지출에만 할부 칸이 보인다', async () => {
@@ -67,7 +62,11 @@ await step('할부로 저장하면 목록에 개월 수와 월 납입액이 보�
 });
 
 await step('현금으로 바꾸면 할부가 사라진다', async () => {
-  const before = await money((m, a) => m.installmentCount(a), { type: 'expense', method: 'credit', installment: 3 });
+  // CSP 가 unsafe-eval 을 막으므로 함수를 문자열로 넘기지 않고 바로 씁니다.
+  const before = await page.evaluate(async (row) => {
+    const m = await import('./js/money.js');
+    return m.installmentCount(row);
+  }, { type: 'expense', method: 'credit', installment: 3 });
   if (before !== 3) throw new Error('앞단 확인 실패');
   const saved = await page.evaluate(async () => {
     const m = await import('./js/money.js');

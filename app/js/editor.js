@@ -234,12 +234,11 @@ function buildForm(api, draft, folders, addedPhotoIds, original) {
   const addCheckBtn = el('button', {
     type: 'button',
     class: 'btn-ghost',
-    html: '<span>＋</span><span>체크리스트 항목 추가</span>',
     onclick: () => {
       draft.checklist.push({ id: db.uid(), text: '', done: false });
       renderChecks(true);
     },
-  });
+  }, [el('span', { text: '＋' }), el('span', { text: '체크리스트 항목 추가' })]);
   body.append(field('체크리스트', checkWrap, addCheckBtn));
 
   function renderChecks(focusLast = false) {

@@ -1,12 +1,13 @@
 /* sw.js — 오프라인 사용과 백그라운드 알림 확인 */
 
-const CACHE = 'todo-cal-v20';
+const CACHE = 'todo-cal-v21';
 const ASSETS = [
   './',
   './index.html',
   './manifest.webmanifest',
   './css/style.css',
   './js/app.js',
+  './js/theme-boot.js',
   './js/db.js',
   './js/store.js',
   './js/util.js',
@@ -81,12 +82,75 @@ self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'skip-waiting') self.skipWaiting();
 });
 
+/* ---------------- 사용자가 고른 앱 아이콘 ----------------
+ * 설정에서 사진을 고르면 meta('appIcon') 에 PNG 세 벌이 들어갑니다.
+ * 매니페스트에 적힌 주소 그대로 그 그림을 내보내므로, 홈 화면에 다시
+ * 추가할 때 그 아이콘이 쓰입니다. 고른 것이 없으면 기본 파일로 넘깁니다.
+ */
+
+const ICON_ROUTES = {
+  'icons/icon-512.png': 'i512',
+  'icons/icon-maskable-512.png': 'i512',
+  'icons/icon-192.png': 'i192',
+  'icons/apple-touch-icon.png': 'i180',
+};
+
+function openAppDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open('todo-cal');
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+    req.onblocked = () => reject(new Error('blocked'));
+  });
+}
+
+async function customIcon(key) {
+  let db;
+  try {
+    db = await openAppDB();
+    if (!db.objectStoreNames.contains('meta')) return null;
+    const row = await new Promise((resolve, reject) => {
+      const r = db.transaction('meta', 'readonly').objectStore('meta').get('appIcon');
+      r.onsuccess = () => resolve(r.result);
+      r.onerror = () => reject(r.error);
+    });
+    const blob = row && row.value && row.value[key];
+    return blob instanceof Blob ? blob : null;
+  } catch {
+    return null;                       // 저장소를 못 읽으면 기본 아이콘으로 갑니다.
+  } finally {
+    if (db) db.close();
+  }
+}
+
+function iconKeyFor(url) {
+  const path = url.pathname;
+  for (const [suffix, key] of Object.entries(ICON_ROUTES)) {
+    if (path.endsWith('/' + suffix)) return key;
+  }
+  return null;
+}
+
 /* 같은 출처의 요청만 캐시에서 먼저 찾고, 뒤에서 조용히 갱신합니다. */
 self.addEventListener('fetch', (event) => {
   const req = event.request;
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;
+
+  const iconKey = iconKeyFor(url);
+  if (iconKey) {
+    event.respondWith((async () => {
+      const blob = await customIcon(iconKey);
+      if (blob) {
+        return new Response(blob, {
+          headers: { 'Content-Type': 'image/png', 'Cache-Control': 'no-store' },
+        });
+      }
+      return caches.match(req).then((c) => c || fetch(req));
+    })());
+    return;
+  }
 
   if (req.mode === 'navigate') {
     event.respondWith(
