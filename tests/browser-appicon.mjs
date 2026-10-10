@@ -102,6 +102,49 @@ await step('서비스 워커가 매니페스트 주소로 내 사진을 내보�
     throw new Error('기본 아이콘이 그대로 나옴: ' + JSON.stringify(mid));
 });
 
+await step('크롬이 읽는 매니페스트에 내 사진이 통째로 들어간다', async () => {
+  /* 홈 화면에 추가할 때 브라우저는 아이콘 파일을 따로 내려받는데, 그 요청은
+     서비스 워커를 거치지 않습니다. 그래서 아이콘 주소를 가로채는 것만으로는
+     모자라고, 매니페스트 안에 그림이 들어 있어야 합니다.
+     Page.getAppManifest 는 크롬이 설치할 때 쓰는 바로 그 경로입니다. */
+  await page.evaluate(() => navigator.serviceWorker.ready);
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send('Page.enable');
+  const m = await cdp.send('Page.getAppManifest');
+  if (m.errors && m.errors.length) throw new Error('매니페스트 오류: ' + JSON.stringify(m.errors));
+
+  const icons = (JSON.parse(m.data || '{}').icons) || [];
+  if (!icons.length) throw new Error('아이콘이 없음');
+  const external = icons.filter((i) => !i.src.startsWith('data:'));
+  if (external.length) throw new Error('따로 내려받아야 하는 아이콘이 남음: ' + JSON.stringify(external));
+
+  const sizes = icons.map((i) => i.sizes).sort();
+  if (JSON.stringify(sizes) !== JSON.stringify(['192x192', '512x512'])) throw new Error(JSON.stringify(sizes));
+  if (!icons.some((i) => (i.purpose || '').includes('maskable'))) throw new Error('maskable 이 없음');
+
+  // 담긴 그림이 정말 내 사진인지 — 가운데 픽셀 색으로 확인합니다.
+  const big = icons.find((i) => i.sizes === '512x512').src;
+  // CSP 가 connect-src 'self' 라 data: 를 fetch 할 수 없습니다.
+  // img-src 는 data: 를 허용하므로 <img> 로 불러옵니다.
+  const mid = await page.evaluate((src) => new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const cv = document.createElement('canvas');
+      cv.width = img.naturalWidth;
+      cv.height = img.naturalHeight;
+      const ctx = cv.getContext('2d');
+      ctx.drawImage(img, 0, 0);
+      const d = ctx.getImageData(Math.floor(cv.width / 2), Math.floor(cv.height / 2), 1, 1).data;
+      resolve([d[0], d[1], d[2], cv.width]);
+    };
+    img.onerror = () => reject(new Error('그림을 못 읽음'));
+    img.src = src;
+  }), big);
+  if (mid[3] !== 512) throw new Error('담긴 그림 크기가 ' + mid[3]);
+  if (!(mid[0] > 230 && mid[1] > 110 && mid[1] < 170 && mid[2] < 80))
+    throw new Error('기본 아이콘이 담김: ' + JSON.stringify(mid));
+});
+
 await step('앱을 다시 열어도 내 아이콘이 남아 있다', async () => {
   await page.reload({ waitUntil: 'networkidle' });
   await page.waitForSelector('.tabbar');
@@ -134,6 +177,17 @@ await step('기본 아이콘으로 되돌릴 수 있다', async () => {
   });
   if (mid[0] > 230 && mid[1] > 110 && mid[1] < 170 && mid[2] < 80)
     throw new Error('아직 내 사진이 나옴: ' + JSON.stringify(mid));
+});
+
+await step('되돌리면 매니페스트도 기본 아이콘으로 간다', async () => {
+  await page.evaluate(() => navigator.serviceWorker.ready);
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send('Page.enable');
+  const m = await cdp.send('Page.getAppManifest');
+  if (m.errors && m.errors.length) throw new Error('매니페스트 오류: ' + JSON.stringify(m.errors));
+  const icons = (JSON.parse(m.data || '{}').icons) || [];
+  if (icons.length !== 3) throw new Error('아이콘이 ' + icons.length + '개');
+  if (icons.some((i) => i.src.startsWith('data:'))) throw new Error('아직 내 사진이 박혀 있음');
 });
 
 await step('이미지가 아닌 파일은 거절한다', async () => {

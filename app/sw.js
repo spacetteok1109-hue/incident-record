@@ -1,6 +1,6 @@
 /* sw.js — 오프라인 사용과 백그라운드 알림 확인 */
 
-const CACHE = 'todo-cal-v22';
+const CACHE = 'todo-cal-v23';
 const ASSETS = [
   './',
   './index.html',
@@ -131,12 +131,64 @@ function iconKeyFor(url) {
   return null;
 }
 
+/* ---------------- 매니페스트에 그림을 박아 넣기 ----------------
+ * 홈 화면에 추가할 때 브라우저가 아이콘 파일을 따로 내려받는데,
+ * 그 요청은 서비스 워커를 거치지 않습니다. 그래서 아이콘 주소를 가로채는
+ * 것만으로는 홈 화면 아이콘이 안 바뀝니다.
+ * 대신 매니페스트 안에 그림을 data: 로 통째로 넣어 두면, 따로 내려받을
+ * 것이 없으니 그 그림이 그대로 쓰입니다.
+ */
+
+async function blobToDataURL(blob) {
+  const buf = new Uint8Array(await blob.arrayBuffer());
+  let bin = '';
+  const STEP = 0x8000;                 // 한 번에 너무 많이 넘기면 스택이 넘칩니다
+  for (let i = 0; i < buf.length; i += STEP) {
+    bin += String.fromCharCode.apply(null, buf.subarray(i, i + STEP));
+  }
+  return `data:${blob.type || 'image/png'};base64,${btoa(bin)}`;
+}
+
+async function manifestWithCustomIcon(req) {
+  const base = await caches.match('./manifest.webmanifest').then((r) => r || fetch(req));
+  const [i192, i512] = await Promise.all([customIcon('i192'), customIcon('i512')]);
+  if (!i192 && !i512) return base;
+
+  let json;
+  try {
+    json = await base.clone().json();
+  } catch {
+    return base;
+  }
+
+  const icons = [];
+  if (i192) {
+    icons.push({ src: await blobToDataURL(i192), sizes: '192x192', type: 'image/png', purpose: 'any' });
+  }
+  if (i512) {
+    // any 와 maskable 을 한 줄로 합쳐 같은 그림을 두 번 싣지 않습니다.
+    icons.push({
+      src: await blobToDataURL(i512), sizes: '512x512', type: 'image/png', purpose: 'any maskable',
+    });
+  }
+  json.icons = icons;
+
+  return new Response(JSON.stringify(json), {
+    headers: { 'Content-Type': 'application/manifest+json', 'Cache-Control': 'no-store' },
+  });
+}
+
 /* 같은 출처의 요청만 캐시에서 먼저 찾고, 뒤에서 조용히 갱신합니다. */
 self.addEventListener('fetch', (event) => {
   const req = event.request;
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;
+
+  if (url.pathname.endsWith('/manifest.webmanifest')) {
+    event.respondWith(manifestWithCustomIcon(req).catch(() => fetch(req)));
+    return;
+  }
 
   const iconKey = iconKeyFor(url);
   if (iconKey) {
